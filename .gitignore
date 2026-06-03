@@ -18,5 +18,11 @@ venv/
 .mypy_cache/
 .ruff_cache/
 
+# Node / TypeScript
+node_modules/
+dist/
+*.tsbuildinfo
+npm-debug.log*
+
 # Local data
 *.db

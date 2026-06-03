@@ -5,8 +5,14 @@ status.
 
 ## What's built
 
-_(Nothing yet — the app is being scaffolded. This list fills in as the
-core slice lands.)_
+The core slice: an Express + TypeScript API over an in-memory store.
+
+- `POST /tasks`, `GET /tasks` (with `?status=all|active|done`),
+  `GET /tasks/:id`, `PATCH /tasks/:id`, `DELETE /tasks/:id`
+- Titles validated and trimmed (1–200 chars); done-toggle and edit
+- Endpoint tests via supertest
+
+See [`README.md`](README.md) to run it.
 
 ## What's intentionally not built
 
