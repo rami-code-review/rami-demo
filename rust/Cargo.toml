@@ -1,0 +1,16 @@
+[package]
+name = "logtail"
+version = "0.1.0"
+edition = "2021"
+description = "A live log tailer with built-in filtering: follow a file like tail -f, keep only the lines that match."
+
+[[bin]]
+name = "logtail"
+path = "src/main.rs"
+
+[lib]
+name = "logtail"
+path = "src/lib.rs"
+
+[dev-dependencies]
+tempfile = "3"

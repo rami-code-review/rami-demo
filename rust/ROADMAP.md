@@ -5,8 +5,15 @@ the lines that match.
 
 ## What's built
 
-_(Nothing yet — the app is being scaffolded. This list fills in as the
-core slice lands.)_
+The core slice: a stdlib-only CLI that follows a file and filters lines.
+
+- `logtail [--filter <substring>] [--from-start] <file>`
+- Follows from end of file by default (like `tail -f`); `--from-start`
+  reads existing content; `--filter` keeps only matching lines
+- Match logic split into a testable library; unit tests plus integration
+  tests over a real temp file
+
+See [`README.md`](README.md) to run it.
 
 ## What's intentionally not built
 

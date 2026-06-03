@@ -29,5 +29,8 @@ npm-debug.log*
 *.test
 *.out
 
+# Rust
+/rust/target/
+
 # Local data
 *.db
