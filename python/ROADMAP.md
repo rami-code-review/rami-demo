@@ -5,8 +5,16 @@ monthly summaries.
 
 ## What's built
 
-_(Nothing yet — the app is being scaffolded. This list fills in as the
-core slice lands.)_
+The core slice: a FastAPI + SQLite app that records transactions and
+summarizes a month.
+
+- `POST /transactions`, `GET /transactions`, `GET /transactions/{id}`,
+  `DELETE /transactions/{id}`
+- `GET /summary?month=YYYY-MM` — per-category totals for a month
+- Eight fixed categories, amounts validated and stored as integer cents
+- Tests covering the endpoints and the summary
+
+See [`README.md`](README.md) to run it.
 
 ## What's intentionally not built
 
