@@ -5,8 +5,15 @@ tracked.
 
 ## What's built
 
-_(Nothing yet — the app is being scaffolded. This list fills in as the
-core slice lands.)_
+The core slice: a stdlib `net/http` service over an in-memory store.
+
+- `POST /shorten` → random base62 code + short URL
+- `GET /{code}` → 302 redirect to the original, counting a click
+- `GET /api/stats/{code}` → click stats
+- URL validation, collision-retried code generation, a concurrency-safe
+  store (`go test -race`), and httptest endpoint tests
+
+See [`README.md`](README.md) to run it.
 
 ## What's intentionally not built
 

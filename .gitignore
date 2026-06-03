@@ -24,5 +24,10 @@ dist/
 *.tsbuildinfo
 npm-debug.log*
 
+# Go
+/go/go
+*.test
+*.out
+
 # Local data
 *.db
