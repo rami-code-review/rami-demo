@@ -55,6 +55,10 @@ on your own repo.
 5. **Watch Rami review it.** Within about a minute, Rami posts its review
    right on your PR. Address what it found, or push back if you disagree —
    the same loop you'd run on real work.
+6. **Close the loop — don't fix it by hand.** Let your agent pull Rami's
+   findings over MCP and apply them, then watch Rami re-review until the
+   flags clear. This repo already ships the rule, so your agent knows the
+   drill — see [Experience the full loop](#experience-the-full-loop).
 
 That's it. The ROADMAPs are a menu, not a contract; the goal is to give
 you a real, self-contained slice of work so the review has something to
@@ -66,16 +70,47 @@ Want to see what a Rami review actually looks like before you fork? These
 apps are built up through small pull requests, each one reviewed by Rami
 as it lands. Browse the [merged PRs](../../pulls?q=is%3Apr+is%3Amerged)
 and open any of them — the reviews you find there are real, on real
-iterative work.
+iterative work. Some threads show the whole loop: Rami flags an issue, an
+agent pushes a fix over MCP, and Rami re-reviews and clears it.
 
-## Want Rami to fix its own findings?
+## Experience the full loop
 
-Rami speaks [MCP](https://modelcontextprotocol.io), so your coding agent
-(Claude Code, Cursor, Codex, …) can pull Rami's findings and apply the
-fixes for you. Setup instructions for every agent live at
-**https://rami.reviews/llms.txt**.
+The review is only half the story. Rami speaks
+[MCP](https://modelcontextprotocol.io), so your coding agent — Claude Code,
+Cursor, or Codex — can pull the findings and fix them for you, then Rami
+re-reviews until the flags clear. You decide what merges. This is the part
+that's hard to believe until you feel it.
 
-Once it's wired up, the magic prompt is just:
+**This repo is already wired for it.** The `CLAUDE.md` and `AGENTS.md` at the
+root tell your agent the loop:
+
+> After every push, run `/rami:review` on the PR. Fix the real findings,
+> rebut the false ones. Repeat until `/rami:review` comes back clean.
+
+So once Rami is connected, you just push — your agent runs the loop.
+
+**Connect your agent (one time)** — in Claude Code:
+
+```
+/plugin marketplace add rami-code-review/claude-code-marketplace
+/plugin install rami@rami-code-review
+```
+
+Then run `claude` → `/mcp` → select `plugin:rami:rami` → log in.
+
+**Two places to point any agent — or yourself:**
+
+- **Marketplace + plugins**, for Claude Code and Codex —
+  https://github.com/rami-code-review/claude-code-marketplace
+- **Setup for every agent**, in one file — **https://rami.reviews/llms.txt**
+
+**Or just let your agent set it up** — paste this into Claude Code, Cursor, or
+Codex:
+
+> Set up the Rami code review plugin (MCP server + skills) and add a rule to run
+> /rami:review after every push until clean. See https://rami.reviews/llms.txt.
+
+**Already have a PR open here?** The one-liner is just:
 
 > "Fetch the Rami findings on my open PR and apply them."
 
