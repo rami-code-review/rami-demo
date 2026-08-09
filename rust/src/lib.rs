@@ -11,6 +11,8 @@ pub struct Config {
     pub filter: Option<String>,
     /// Read existing content before following; otherwise start at end of file.
     pub from_start: bool,
+    /// Invert the filter: keep lines that do NOT match.
+    pub invert: bool,
 }
 
 /// An error in the command-line arguments.
@@ -26,12 +28,13 @@ impl std::fmt::Display for ParseError {
 impl std::error::Error for ParseError {}
 
 /// The usage string shown on a parse error or `--help`.
-pub const USAGE: &str = "usage: logtail [--filter <substring>] [--from-start] <file>";
+pub const USAGE: &str = "usage: logtail [--filter <substring>] [--invert] [--from-start] <file>";
 
 /// Parse command-line arguments (excluding the program name) into a [`Config`].
 pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, ParseError> {
     let mut filter = None;
     let mut from_start = false;
+    let mut invert = false;
     let mut path = None;
 
     let mut iter = args.into_iter();
@@ -44,6 +47,7 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, Par
                 filter = Some(value);
             }
             "--from-start" => from_start = true,
+            "--invert" => invert = true,
             other if other.starts_with("--") => {
                 return Err(ParseError(format!("unknown flag: {other}")));
             }
@@ -61,15 +65,16 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, Par
             path,
             filter,
             from_start,
+            invert,
         }),
         None => Err(ParseError("a file argument is required".to_string())),
     }
 }
 
-/// Report whether a line should be printed under the given filter.
-pub fn matches(line: &str, filter: Option<&str>) -> bool {
+/// Report whether a line should be printed under the given filter and invert setting.
+pub fn matches(line: &str, filter: Option<&str>, invert: bool) -> bool {
     match filter {
-        Some(needle) => line.contains(needle),
+        Some(needle) => line.contains(needle) != invert,
         None => true,
     }
 }
@@ -82,6 +87,7 @@ pub fn filter_available<R: BufRead, W: Write>(
     reader: &mut R,
     out: &mut W,
     filter: Option<&str>,
+    invert: bool,
 ) -> io::Result<usize> {
     let mut written = 0;
     let mut line = String::new();
@@ -92,7 +98,7 @@ pub fn filter_available<R: BufRead, W: Write>(
             break;
         }
         let trimmed = line.trim_end_matches(['\r', '\n']);
-        if matches(trimmed, filter) {
+        if matches(trimmed, filter, invert) {
             writeln!(out, "{trimmed}")?;
             written += 1;
         }
@@ -116,7 +122,8 @@ mod tests {
             Config {
                 path: "app.log".to_string(),
                 filter: None,
-                from_start: false
+                from_start: false,
+                invert: false,
             }
         );
     }
@@ -130,6 +137,7 @@ mod tests {
                 path: "app.log".to_string(),
                 filter: Some("ERROR".to_string()),
                 from_start: true,
+                invert: false,
             }
         );
     }
@@ -156,9 +164,9 @@ mod tests {
 
     #[test]
     fn matches_respects_substring_and_none() {
-        assert!(matches("an ERROR line", Some("ERROR")));
-        assert!(!matches("an info line", Some("ERROR")));
-        assert!(matches("anything", None));
+        assert!(matches("an ERROR line", Some("ERROR"), false));
+        assert!(!matches("an info line", Some("ERROR"), false));
+        assert!(matches("anything", None, false));
     }
 
     #[test]
@@ -166,7 +174,7 @@ mod tests {
         let input = "INFO start\nERROR boom\nINFO ok\nERROR again\n";
         let mut reader = std::io::Cursor::new(input);
         let mut out = Vec::new();
-        let written = filter_available(&mut reader, &mut out, Some("ERROR")).unwrap();
+        let written = filter_available(&mut reader, &mut out, Some("ERROR"), false).unwrap();
         assert_eq!(written, 2);
         assert_eq!(String::from_utf8(out).unwrap(), "ERROR boom\nERROR again\n");
     }
@@ -176,7 +184,7 @@ mod tests {
         let input = "one\ntwo\nthree\n";
         let mut reader = std::io::Cursor::new(input);
         let mut out = Vec::new();
-        let written = filter_available(&mut reader, &mut out, None).unwrap();
+        let written = filter_available(&mut reader, &mut out, None, false).unwrap();
         assert_eq!(written, 3);
         assert_eq!(String::from_utf8(out).unwrap(), "one\ntwo\nthree\n");
     }
@@ -186,7 +194,7 @@ mod tests {
         let input = "ERROR crlf\r\nINFO skip\r\n";
         let mut reader = std::io::Cursor::new(input);
         let mut out = Vec::new();
-        filter_available(&mut reader, &mut out, Some("ERROR")).unwrap();
+        filter_available(&mut reader, &mut out, Some("ERROR"), false).unwrap();
         assert_eq!(String::from_utf8(out).unwrap(), "ERROR crlf\n");
     }
 
@@ -195,8 +203,39 @@ mod tests {
         let input = "ERROR done";
         let mut reader = std::io::Cursor::new(input);
         let mut out = Vec::new();
-        let written = filter_available(&mut reader, &mut out, Some("ERROR")).unwrap();
+        let written = filter_available(&mut reader, &mut out, Some("ERROR"), false).unwrap();
         assert_eq!(written, 1);
         assert_eq!(String::from_utf8(out).unwrap(), "ERROR done\n");
+    }
+
+    #[test]
+    fn parses_invert_flag() {
+        let config = parse(&["--invert", "--filter", "ERROR", "app.log"]).unwrap();
+        assert_eq!(
+            config,
+            Config {
+                path: "app.log".to_string(),
+                filter: Some("ERROR".to_string()),
+                from_start: false,
+                invert: true,
+            }
+        );
+    }
+
+    #[test]
+    fn matches_inverts_filter_when_invert_is_true() {
+        assert!(!matches("an ERROR line", Some("ERROR"), true));
+        assert!(matches("an info line", Some("ERROR"), true));
+        assert!(matches("anything", None, true));
+    }
+
+    #[test]
+    fn filter_available_with_invert_keeps_non_matching_lines() {
+        let input = "INFO start\nERROR boom\nINFO ok\nERROR again\n";
+        let mut reader = std::io::Cursor::new(input);
+        let mut out = Vec::new();
+        let written = filter_available(&mut reader, &mut out, Some("ERROR"), true).unwrap();
+        assert_eq!(written, 2);
+        assert_eq!(String::from_utf8(out).unwrap(), "INFO start\nINFO ok\n");
     }
 }

@@ -22,7 +22,7 @@ fn reads_appended_lines_incrementally() {
     let mut reader = BufReader::new(File::open(&path).unwrap());
 
     let mut out = Vec::new();
-    let written = filter_available(&mut reader, &mut out, Some("ERROR")).unwrap();
+    let written = filter_available(&mut reader, &mut out, Some("ERROR"), false).unwrap();
     assert_eq!(written, 1);
     assert_eq!(String::from_utf8(out.clone()).unwrap(), "ERROR first\n");
 
@@ -32,7 +32,7 @@ fn reads_appended_lines_incrementally() {
     writer.flush().unwrap();
 
     out.clear();
-    let written = filter_available(&mut reader, &mut out, Some("ERROR")).unwrap();
+    let written = filter_available(&mut reader, &mut out, Some("ERROR"), false).unwrap();
     assert_eq!(written, 1);
     assert_eq!(String::from_utf8(out).unwrap(), "ERROR second\n");
 }
@@ -59,6 +59,53 @@ fn from_end_skips_existing_content() {
     writer.flush().unwrap();
 
     let mut out = Vec::new();
-    filter_available(&mut reader, &mut out, None).unwrap();
+    filter_available(&mut reader, &mut out, None, false).unwrap();
     assert_eq!(String::from_utf8(out).unwrap(), "new line\n");
+}
+
+/// Inverted filtering shows non-matching lines.
+#[test]
+fn invert_shows_non_matching_lines() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("app.log");
+
+    let mut writer = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .unwrap();
+    writeln!(writer, "INFO boot").unwrap();
+    writeln!(writer, "ERROR first").unwrap();
+    writeln!(writer, "INFO ok").unwrap();
+    writer.flush().unwrap();
+
+    let mut reader = BufReader::new(File::open(&path).unwrap());
+
+    let mut out = Vec::new();
+    let written = filter_available(&mut reader, &mut out, Some("ERROR"), true).unwrap();
+    assert_eq!(written, 2);
+    assert_eq!(String::from_utf8(out).unwrap(), "INFO boot\nINFO ok\n");
+}
+
+/// Inverted with no filter still shows all lines (consistent with empty filter logic).
+#[test]
+fn invert_with_no_filter_shows_all() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("app.log");
+
+    let mut writer = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .unwrap();
+    writeln!(writer, "any line").unwrap();
+    writeln!(writer, "another").unwrap();
+    writer.flush().unwrap();
+
+    let mut reader = BufReader::new(File::open(&path).unwrap());
+
+    let mut out = Vec::new();
+    let written = filter_available(&mut reader, &mut out, None, true).unwrap();
+    assert_eq!(written, 2);
+    assert_eq!(String::from_utf8(out).unwrap(), "any line\nanother\n");
 }
