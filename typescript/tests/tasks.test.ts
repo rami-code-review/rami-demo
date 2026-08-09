@@ -307,6 +307,34 @@ describe("POST /tasks/bulk/action", () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("action must be one of");
   });
+
+  it("deduplicates ids and counts each task once", async () => {
+    const api = app();
+    const t1 = await request(api).post("/tasks").send({ title: "dedupe test" });
+
+    const res = await request(api).post("/tasks/bulk/action").send({
+      ids: [t1.body.id, t1.body.id],
+      action: "complete",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.succeeded).toBe(1);
+    expect(res.body.failed).toBe(0);
+    expect(res.body.failedIds).toEqual([]);
+
+    const done = await request(api).get("/tasks?status=done");
+    expect(done.body.length).toBe(1);
+  });
+
+  it("rejects non-string ids", async () => {
+    const res = await request(app()).post("/tasks/bulk/action").send({
+      ids: ["valid-id", 123, null],
+      action: "complete",
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("each id must be a string");
+  });
 });
 
 describe("TaskStore.list", () => {

@@ -59,7 +59,8 @@ export class TaskStore {
     let failed = 0;
     const failedIds: string[] = [];
 
-    for (const id of ids) {
+    const uniqueIds = [...new Set(ids)];
+    for (const id of uniqueIds) {
       if (action === "complete") {
         const existing = this.tasks.get(id);
         if (existing === undefined) {

@@ -97,12 +97,20 @@ export function createApp(store: TaskStore = new TaskStore()): Express {
       return res.status(400).json({ error: "ids must be an array" });
     }
 
+    if (!ids.every((id): id is string => typeof id === "string")) {
+      return res.status(400).json({ error: "each id must be a string" });
+    }
+
     if (action !== "complete" && action !== "delete") {
       return res.status(400).json({ error: "action must be one of: complete, delete" });
     }
 
-    const result = store.bulkAction(ids, action);
-    return res.json(result);
+    try {
+      const result = store.bulkAction(ids, action);
+      return res.json(result);
+    } catch (err) {
+      return res.status(500).json({ error: "internal server error" });
+    }
   });
 
   return app;
