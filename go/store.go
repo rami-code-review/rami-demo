@@ -8,10 +8,11 @@ import (
 
 // Link is a shortened URL and its click count.
 type Link struct {
-	Code      string    `json:"code"`
-	URL       string    `json:"url"`
-	Clicks    int64     `json:"clicks"`
-	CreatedAt time.Time `json:"created_at"`
+	Code      string     `json:"code"`
+	URL       string     `json:"url"`
+	Clicks    int64      `json:"clicks"`
+	CreatedAt time.Time  `json:"created_at"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 // ErrCodeExhausted is returned when a unique code could not be generated.
@@ -30,7 +31,8 @@ func NewStore() *Store {
 }
 
 // Create stores a URL under a freshly generated unique code and returns the link.
-func (s *Store) Create(url string) (Link, error) {
+// If expiresInSeconds is > 0, the link will expire after that duration.
+func (s *Store) Create(url string, expiresInSeconds int64) (Link, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -50,17 +52,25 @@ func (s *Store) Create(url string) (Link, error) {
 	}
 
 	link := &Link{Code: code, URL: url, Clicks: 0, CreatedAt: s.now()}
+	if expiresInSeconds > 0 {
+		expiresAt := s.now().Add(time.Duration(expiresInSeconds) * time.Second)
+		link.ExpiresAt = &expiresAt
+	}
 	s.links[code] = link
 	return *link, nil
 }
 
 // Resolve returns the URL for a code and increments its click count.
+// Returns false if the code does not exist or has expired.
 func (s *Store) Resolve(code string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	link, ok := s.links[code]
 	if !ok {
+		return "", false
+	}
+	if link.ExpiresAt != nil && s.now().After(*link.ExpiresAt) {
 		return "", false
 	}
 	link.Clicks++

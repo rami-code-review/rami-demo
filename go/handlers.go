@@ -8,7 +8,8 @@ import (
 )
 
 type shortenRequest struct {
-	URL string `json:"url"`
+	URL              string `json:"url"`
+	ExpiresInSeconds int64  `json:"expires_in_seconds,omitempty"`
 }
 
 type shortenResponse struct {
@@ -68,7 +69,7 @@ func (h *Handler) shorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	link, err := h.store.Create(req.URL)
+	link, err := h.store.Create(req.URL, req.ExpiresInSeconds)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not create short link")
 		return

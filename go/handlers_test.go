@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func newTestServer() *httptest.Server {
@@ -126,6 +127,61 @@ func TestStatsUnknownReturns404(t *testing.T) {
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + "/api/stats/missing")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestShortenWithExpiry(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+	client := noRedirectClient()
+
+	resp := shorten(t, srv, `{"url":"https://example.com","expires_in_seconds":3600}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", resp.StatusCode)
+	}
+	var out shortenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	statsResp, err := client.Get(srv.URL + "/api/stats/" + out.Code)
+	if err != nil {
+		t.Fatalf("stats: %v", err)
+	}
+	defer statsResp.Body.Close()
+	var link Link
+	if err := json.NewDecoder(statsResp.Body).Decode(&link); err != nil {
+		t.Fatalf("decode stats: %v", err)
+	}
+	if link.ExpiresAt == nil {
+		t.Error("expected ExpiresAt to be set in response")
+	}
+}
+
+func TestResolveExpiredLinkReturns404(t *testing.T) {
+	s := newTestStore()
+	link, _ := s.Create("https://example.com", 3600)
+
+	h := &Handler{store: s, baseURL: "http://short.test"}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /{code}", h.resolve)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	client := noRedirectClient()
+
+	s.now = func() time.Time {
+		return time.Date(2026, 6, 1, 13, 1, 0, 0, time.UTC)
+	}
+
+	resp, err := client.Get(srv.URL + "/" + link.Code)
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
