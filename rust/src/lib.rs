@@ -1,6 +1,7 @@
 //! A live log tailer with built-in filtering — the reusable core behind the `logtail` binary.
 
 use std::io::{self, BufRead, Write};
+use regex::Regex;
 
 /// How `logtail` was configured to run.
 #[derive(Debug, PartialEq, Eq)]
@@ -13,6 +14,8 @@ pub struct Config {
     pub from_start: bool,
     /// Invert the filter: keep lines that do NOT match.
     pub invert: bool,
+    /// Treat filter as a regular expression instead of a substring.
+    pub regex_mode: bool,
 }
 
 /// An error in the command-line arguments.
@@ -28,13 +31,14 @@ impl std::fmt::Display for ParseError {
 impl std::error::Error for ParseError {}
 
 /// The usage string shown on a parse error or `--help`.
-pub const USAGE: &str = "usage: logtail [--filter <substring>] [--invert] [--from-start] <file>";
+pub const USAGE: &str = "usage: logtail [--filter <substring>] [--regex] [--invert] [--from-start] <file>";
 
 /// Parse command-line arguments (excluding the program name) into a [`Config`].
 pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, ParseError> {
     let mut filter = None;
     let mut from_start = false;
     let mut invert = false;
+    let mut regex_mode = false;
     let mut path = None;
 
     let mut iter = args.into_iter();
@@ -48,6 +52,7 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, Par
             }
             "--from-start" => from_start = true,
             "--invert" => invert = true,
+            "--regex" => regex_mode = true,
             other if other.starts_with("--") => {
                 return Err(ParseError(format!("unknown flag: {other}")));
             }
@@ -60,12 +65,19 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, Par
         }
     }
 
+    if let Some(ref f) = filter {
+        if regex_mode {
+            Regex::new(f).map_err(|e| ParseError(format!("invalid regex: {e}")))?;
+        }
+    }
+
     match path {
         Some(path) => Ok(Config {
             path,
             filter,
             from_start,
             invert,
+            regex_mode,
         }),
         None => Err(ParseError("a file argument is required".to_string())),
     }
@@ -73,8 +85,22 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, Par
 
 /// Report whether a line should be printed under the given filter and invert setting.
 pub fn matches(line: &str, filter: Option<&str>, invert: bool) -> bool {
+    matches_mode(line, filter, invert, false)
+}
+
+/// Report whether a line should be printed, supporting regex mode.
+pub fn matches_mode(line: &str, filter: Option<&str>, invert: bool, regex_mode: bool) -> bool {
     match filter {
-        Some(needle) => line.contains(needle) != invert,
+        Some(pattern) => {
+            let matched = if regex_mode {
+                Regex::new(pattern)
+                    .map(|re| re.is_match(line))
+                    .unwrap_or(false)
+            } else {
+                line.contains(pattern)
+            };
+            matched != invert
+        }
         None => !invert,
     }
 }
@@ -89,6 +115,17 @@ pub fn filter_available<R: BufRead, W: Write>(
     filter: Option<&str>,
     invert: bool,
 ) -> io::Result<usize> {
+    filter_available_mode(reader, out, filter, invert, false)
+}
+
+/// Read all currently available lines, supporting regex mode.
+pub fn filter_available_mode<R: BufRead, W: Write>(
+    reader: &mut R,
+    out: &mut W,
+    filter: Option<&str>,
+    invert: bool,
+    regex_mode: bool,
+) -> io::Result<usize> {
     let mut written = 0;
     let mut line = String::new();
     loop {
@@ -98,7 +135,7 @@ pub fn filter_available<R: BufRead, W: Write>(
             break;
         }
         let trimmed = line.trim_end_matches(['\r', '\n']);
-        if matches(trimmed, filter, invert) {
+        if matches_mode(trimmed, filter, invert, regex_mode) {
             writeln!(out, "{trimmed}")?;
             written += 1;
         }
@@ -124,6 +161,7 @@ mod tests {
                 filter: None,
                 from_start: false,
                 invert: false,
+                regex_mode: false,
             }
         );
     }
@@ -138,6 +176,7 @@ mod tests {
                 filter: Some("ERROR".to_string()),
                 from_start: true,
                 invert: false,
+                regex_mode: false,
             }
         );
     }
@@ -218,6 +257,7 @@ mod tests {
                 filter: Some("ERROR".to_string()),
                 from_start: false,
                 invert: true,
+                regex_mode: false,
             }
         );
     }
@@ -237,5 +277,53 @@ mod tests {
         let written = filter_available(&mut reader, &mut out, Some("ERROR"), true).unwrap();
         assert_eq!(written, 2);
         assert_eq!(String::from_utf8(out).unwrap(), "INFO start\nINFO ok\n");
+    }
+
+    #[test]
+    fn parses_regex_flag() {
+        let config = parse(&["--filter", "ERR.*", "--regex", "app.log"]).unwrap();
+        assert_eq!(
+            config,
+            Config {
+                path: "app.log".to_string(),
+                filter: Some("ERR.*".to_string()),
+                from_start: false,
+                invert: false,
+                regex_mode: true,
+            }
+        );
+    }
+
+    #[test]
+    fn regex_flag_validates_pattern() {
+        let result = parse(&["--filter", "[invalid", "--regex", "app.log"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn matches_mode_regex_pattern() {
+        assert!(matches_mode("ERROR: boom", Some("^ERROR"), false, true));
+        assert!(!matches_mode("INFO: ok", Some("^ERROR"), false, true));
+        assert!(matches_mode("error: case", Some("(?i)ERROR"), false, true));
+    }
+
+    #[test]
+    fn filter_available_mode_with_regex_matches_pattern() {
+        let input = "ERROR: boom\nINFO: ok\nERROR: again\n";
+        let mut reader = std::io::Cursor::new(input);
+        let mut out = Vec::new();
+        let written = filter_available_mode(&mut reader, &mut out, Some("^ERROR"), false, true).unwrap();
+        assert_eq!(written, 2);
+        assert_eq!(String::from_utf8(out).unwrap(), "ERROR: boom\nERROR: again\n");
+    }
+
+    #[test]
+    fn filter_available_mode_regex_with_invert() {
+        let input = "ERROR: boom\nINFO: ok\nERROR: again\n";
+        let mut reader = std::io::Cursor::new(input);
+        let mut out = Vec::new();
+        let written = filter_available_mode(&mut reader, &mut out, Some("^ERROR"), true, true).unwrap();
+        assert_eq!(written, 1);
+        assert_eq!(String::from_utf8(out).unwrap(), "INFO: ok\n");
     }
 }
