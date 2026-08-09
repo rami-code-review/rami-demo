@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import sqlite3
 from datetime import date
+from decimal import Decimal
 
 from .models import (
     CategoryTotal,
@@ -123,3 +126,23 @@ def monthly_summary(conn: sqlite3.Connection, month: str) -> Summary:
     ]
     overall = sum((row["total_cents"] for row in rows), 0)
     return Summary(month=month, totals=totals, total=from_cents(overall))
+
+
+def import_transactions(
+    conn: sqlite3.Connection, csv_content: str
+) -> list[TransactionOut]:
+    """Parse and insert transactions from CSV content. Expected columns: amount, category, description, date."""
+    reader = csv.DictReader(io.StringIO(csv_content))
+    if reader.fieldnames is None:
+        raise ValueError("CSV is empty")
+
+    inserted = []
+    for row in reader:
+        tx_in = TransactionIn(
+            amount=Decimal(row["amount"].strip()),
+            category=row["category"].strip(),
+            description=row.get("description", "").strip(),
+            date=date.fromisoformat(row["date"].strip()),
+        )
+        inserted.append(create_transaction(conn, tx_in))
+    return inserted

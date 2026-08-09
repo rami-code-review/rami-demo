@@ -8,7 +8,7 @@ from collections.abc import AsyncIterator, Iterator
 from datetime import date
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, UploadFile
 
 from . import storage
 from .db import closing_connection, init_db
@@ -96,3 +96,16 @@ def summary(
     if not MONTH_PATTERN.match(month):
         raise HTTPException(status_code=422, detail="month must be formatted YYYY-MM")
     return storage.monthly_summary(conn, month)
+
+
+@app.post("/transactions/import", response_model=list[TransactionOut], status_code=201)
+def import_transactions(
+    file: UploadFile, conn: sqlite3.Connection = Depends(get_db)
+) -> list[TransactionOut]:
+    """Import transactions from a CSV file."""
+    try:
+        content = file.file.read()
+        csv_text = content.decode("utf-8")
+        return storage.import_transactions(conn, csv_text)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
