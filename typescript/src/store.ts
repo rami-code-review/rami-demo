@@ -50,4 +50,36 @@ export class TaskStore {
   delete(id: string): boolean {
     return this.tasks.delete(id);
   }
+
+  bulkAction(
+    ids: string[],
+    action: "complete" | "delete",
+  ): { succeeded: number; failed: number; failedIds: string[] } {
+    let succeeded = 0;
+    let failed = 0;
+    const failedIds: string[] = [];
+
+    for (const id of ids) {
+      if (action === "complete") {
+        const existing = this.tasks.get(id);
+        if (existing === undefined) {
+          failed++;
+          failedIds.push(id);
+        } else {
+          const updated: Task = { ...existing, done: true };
+          this.tasks.set(id, updated);
+          succeeded++;
+        }
+      } else if (action === "delete") {
+        if (!this.tasks.delete(id)) {
+          failed++;
+          failedIds.push(id);
+        } else {
+          succeeded++;
+        }
+      }
+    }
+
+    return { succeeded, failed, failedIds };
+  }
 }
