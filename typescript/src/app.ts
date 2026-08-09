@@ -29,8 +29,9 @@ export function createApp(store: TaskStore = new TaskStore()): Express {
       return res.status(400).json({ error: "status must be one of: all, active, done" });
     }
     const tagParam = req.query.tag;
+    const tagValue = Array.isArray(tagParam) ? tagParam[0] : tagParam;
     const tag =
-      tagParam === undefined || tagParam === "" ? undefined : String(tagParam);
+      tagValue === undefined || tagValue === "" ? undefined : String(tagValue);
     return res.json(store.list(status, tag));
   });
 

@@ -31,7 +31,7 @@ export function normalizeTitle(raw: unknown): string {
 
 /** Validate and normalize tags, or throw ValidationError. */
 export function normalizeTags(raw: unknown): string[] {
-  if (raw === undefined) {
+  if (raw === undefined || raw === null) {
     return [];
   }
   if (!Array.isArray(raw)) {
