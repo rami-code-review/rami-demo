@@ -74,6 +74,40 @@ def _month_bounds(month: str) -> tuple[str, str]:
     return start.isoformat(), end.isoformat()
 
 
+def search_transactions(
+    conn: sqlite3.Connection,
+    q: str | None = None,
+    category: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+) -> list[TransactionOut]:
+    """Return transactions matching the provided filters, newest first."""
+    query = "SELECT id, amount_cents, category, description, date FROM transactions WHERE 1=1"
+    params: list = []
+
+    if q:
+        escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        query += " AND description LIKE ? ESCAPE '\\'"
+        params.append(f"%{escaped}%")
+
+    if category:
+        query += " AND category = ?"
+        params.append(category)
+
+    if start:
+        query += " AND date >= ?"
+        params.append(start)
+
+    if end:
+        query += " AND date <= ?"
+        params.append(end)
+
+    query += " ORDER BY date DESC, id DESC"
+
+    rows = conn.execute(query, params).fetchall()
+    return [_row_to_transaction(row) for row in rows]
+
+
 def monthly_summary(conn: sqlite3.Connection, month: str) -> Summary:
     """Return per-category totals and the overall total for the given YYYY-MM month."""
     start, end = _month_bounds(month)
