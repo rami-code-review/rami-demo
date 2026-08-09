@@ -3,6 +3,7 @@ export interface Task {
   title: string;
   done: boolean;
   createdAt: string;
+  tags?: string[];
 }
 
 export type TaskStatus = "all" | "active" | "done";
@@ -26,4 +27,25 @@ export function normalizeTitle(raw: unknown): string {
     throw new ValidationError("title must be at most 200 characters");
   }
   return title;
+}
+
+/** Validate and normalize tags, or throw ValidationError. */
+export function normalizeTags(raw: unknown): string[] {
+  if (raw === undefined || raw === null) {
+    return [];
+  }
+  if (!Array.isArray(raw)) {
+    throw new ValidationError("tags must be an array");
+  }
+  const normalized = new Set<string>();
+  for (const tag of raw) {
+    if (typeof tag !== "string") {
+      throw new ValidationError("each tag must be a string");
+    }
+    const trimmed = tag.trim();
+    if (trimmed.length > 0) {
+      normalized.add(trimmed);
+    }
+  }
+  return Array.from(normalized);
 }

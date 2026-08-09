@@ -38,6 +38,28 @@ describe("POST /tasks", () => {
       .send({ title: "x".repeat(201) });
     expect(res.status).toBe(400);
   });
+
+  it("creates a task with tags", async () => {
+    const res = await request(app())
+      .post("/tasks")
+      .send({ title: "Write tests", tags: ["work", "urgent"] });
+    expect(res.status).toBe(201);
+    expect(res.body.tags).toEqual(["work", "urgent"]);
+  });
+
+  it("rejects tags that are not an array", async () => {
+    const res = await request(app())
+      .post("/tasks")
+      .send({ title: "Task", tags: "work" });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects tags with non-string elements", async () => {
+    const res = await request(app())
+      .post("/tasks")
+      .send({ title: "Task", tags: ["work", 123] });
+    expect(res.status).toBe(400);
+  });
 });
 
 describe("GET /tasks", () => {
@@ -69,6 +91,33 @@ describe("GET /tasks", () => {
   it("rejects an unknown status", async () => {
     const res = await request(app()).get("/tasks?status=archived");
     expect(res.status).toBe(400);
+  });
+
+  it("filters by tag", async () => {
+    const api = app();
+    await request(api).post("/tasks").send({ title: "work task", tags: ["work"] });
+    await request(api).post("/tasks").send({ title: "personal task", tags: ["personal"] });
+    await request(api).post("/tasks").send({ title: "both", tags: ["work", "personal"] });
+
+    const workTasks = await request(api).get("/tasks?tag=work");
+    expect(workTasks.body.length).toBe(2);
+    expect(workTasks.body.map((t: { title: string }) => t.title).sort()).toEqual(["both", "work task"]);
+
+    const personalTasks = await request(api).get("/tasks?tag=personal");
+    expect(personalTasks.body.length).toBe(2);
+    expect(personalTasks.body.map((t: { title: string }) => t.title).sort()).toEqual(["both", "personal task"]);
+  });
+
+  it("composes tag and status filters", async () => {
+    const api = app();
+    const t1 = await request(api).post("/tasks").send({ title: "active work", tags: ["work"] });
+    const t2 = await request(api).post("/tasks").send({ title: "done work", tags: ["work"] });
+    const t3 = await request(api).post("/tasks").send({ title: "active personal", tags: ["personal"] });
+
+    await request(api).patch(`/tasks/${t2.body.id}`).send({ done: true });
+
+    const result = await request(api).get("/tasks?tag=work&status=active");
+    expect(result.body.map((t: { title: string }) => t.title)).toEqual(["active work"]);
   });
 });
 
@@ -129,6 +178,38 @@ describe("PATCH /tasks/:id", () => {
   it("returns 404 for a missing task", async () => {
     const res = await request(app()).patch("/tasks/nope").send({ done: true });
     expect(res.status).toBe(404);
+  });
+
+  it("updates tags", async () => {
+    const api = app();
+    const created = await request(api)
+      .post("/tasks")
+      .send({ title: "task", tags: ["old"] });
+    const res = await request(api)
+      .patch(`/tasks/${created.body.id}`)
+      .send({ tags: ["new", "tags"] });
+    expect(res.status).toBe(200);
+    expect(res.body.tags).toEqual(["new", "tags"]);
+  });
+
+  it("clears tags when set to empty array", async () => {
+    const api = app();
+    const created = await request(api)
+      .post("/tasks")
+      .send({ title: "task", tags: ["work"] });
+    const res = await request(api)
+      .patch(`/tasks/${created.body.id}`)
+      .send({ tags: [] });
+    expect(res.body.tags).toBeUndefined();
+  });
+
+  it("rejects non-array tags in PATCH", async () => {
+    const api = app();
+    const created = await request(api).post("/tasks").send({ title: "t" });
+    const res = await request(api)
+      .patch(`/tasks/${created.body.id}`)
+      .send({ tags: "work" });
+    expect(res.status).toBe(400);
   });
 });
 

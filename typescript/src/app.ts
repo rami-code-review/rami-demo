@@ -1,6 +1,6 @@
 import express, { type Express, type Request, type Response } from "express";
 import { TaskStore } from "./store.js";
-import { isTaskStatus, normalizeTitle, ValidationError } from "./task.js";
+import { isTaskStatus, normalizeTitle, normalizeTags, ValidationError } from "./task.js";
 
 /** Build the task-manager Express app around a task store. */
 export function createApp(store: TaskStore = new TaskStore()): Express {
@@ -9,15 +9,17 @@ export function createApp(store: TaskStore = new TaskStore()): Express {
 
   app.post("/tasks", (req: Request, res: Response) => {
     let title: string;
+    let tags: string[] = [];
     try {
       title = normalizeTitle(req.body?.title);
+      tags = normalizeTags(req.body?.tags);
     } catch (err) {
       if (err instanceof ValidationError) {
         return res.status(400).json({ error: err.message });
       }
       throw err;
     }
-    return res.status(201).json(store.create(title));
+    return res.status(201).json(store.create(title, tags));
   });
 
   app.get("/tasks", (req: Request, res: Response) => {
@@ -26,7 +28,11 @@ export function createApp(store: TaskStore = new TaskStore()): Express {
     if (!isTaskStatus(status)) {
       return res.status(400).json({ error: "status must be one of: all, active, done" });
     }
-    return res.json(store.list(status));
+    const tagParam = req.query.tag;
+    const tagValue = Array.isArray(tagParam) ? tagParam[0] : tagParam;
+    const tag =
+      tagValue === undefined || tagValue === "" ? undefined : String(tagValue);
+    return res.json(store.list(status, tag));
   });
 
   app.get<{ id: string }>("/tasks/:id", (req, res) => {
@@ -38,7 +44,7 @@ export function createApp(store: TaskStore = new TaskStore()): Express {
   });
 
   app.patch<{ id: string }>("/tasks/:id", (req, res) => {
-    const changes: { title?: string; done?: boolean } = {};
+    const changes: { title?: string; done?: boolean; tags?: string[] } = {};
 
     if (req.body?.title !== undefined) {
       try {
@@ -56,6 +62,17 @@ export function createApp(store: TaskStore = new TaskStore()): Express {
         return res.status(400).json({ error: "done must be a boolean" });
       }
       changes.done = req.body.done;
+    }
+
+    if (req.body?.tags !== undefined) {
+      try {
+        changes.tags = normalizeTags(req.body.tags);
+      } catch (err) {
+        if (err instanceof ValidationError) {
+          return res.status(400).json({ error: err.message });
+        }
+        throw err;
+      }
     }
 
     const updated = store.update(req.params.id, changes);
