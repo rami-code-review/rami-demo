@@ -5,12 +5,13 @@ import type { Task, TaskStatus } from "./task.js";
 export class TaskStore {
   private tasks = new Map<string, Task>();
 
-  create(title: string): Task {
+  create(title: string, tags?: string[]): Task {
     const task: Task = {
       id: randomUUID(),
       title,
       done: false,
       createdAt: new Date().toISOString(),
+      tags: tags && tags.length > 0 ? tags : undefined,
     };
     this.tasks.set(task.id, task);
     return task;
@@ -20,22 +21,27 @@ export class TaskStore {
     return this.tasks.get(id);
   }
 
-  list(status: TaskStatus = "all"): Task[] {
+  list(status: TaskStatus = "all", tag?: string): Task[] {
     const all = [...this.tasks.values()].sort((a, b) =>
       a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0,
     );
-    if (status === "active") return all.filter((t) => !t.done);
-    if (status === "done") return all.filter((t) => t.done);
-    return all;
+    let filtered = all;
+    if (status === "active") filtered = all.filter((t) => !t.done);
+    if (status === "done") filtered = all.filter((t) => t.done);
+    if (tag !== undefined) {
+      filtered = filtered.filter((t) => t.tags && t.tags.includes(tag));
+    }
+    return filtered;
   }
 
-  update(id: string, changes: { title?: string; done?: boolean }): Task | undefined {
+  update(id: string, changes: { title?: string; done?: boolean; tags?: string[] }): Task | undefined {
     const existing = this.tasks.get(id);
     if (existing === undefined) return undefined;
     const updated: Task = {
       ...existing,
       title: changes.title ?? existing.title,
       done: changes.done ?? existing.done,
+      tags: changes.tags !== undefined ? (changes.tags.length > 0 ? changes.tags : undefined) : existing.tags,
     };
     this.tasks.set(id, updated);
     return updated;
