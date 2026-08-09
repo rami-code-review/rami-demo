@@ -106,3 +106,14 @@ not-a-number,food,Dinner,2026-06-02
     final_response = client.get("/transactions")
     final_count = len(final_response.json())
     assert final_count == initial_count
+
+
+def test_import_csv_rejects_oversized_file(client: TestClient) -> None:
+    large_content = b"amount,category,description,date\n" + b"1.00,food,test,2026-06-01\n" * (1024 * 1024)
+    response = client.post(
+        "/transactions/import",
+        files={"file": ("test.csv", BytesIO(large_content), "text/csv")},
+    )
+    assert response.status_code == 413
+    detail = response.json()["detail"]
+    assert "large" in detail.lower()

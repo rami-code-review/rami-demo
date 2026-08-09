@@ -103,8 +103,11 @@ def import_transactions(
     file: UploadFile, conn: sqlite3.Connection = Depends(get_db)
 ) -> list[TransactionOut]:
     """Import transactions from a CSV file."""
+    max_size = 10 * 1024 * 1024
     try:
-        content = file.file.read()
+        content = file.file.read(max_size + 1)
+        if len(content) > max_size:
+            raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
         csv_text = content.decode("utf-8")
         return storage.import_transactions(conn, csv_text)
     except (ValueError, KeyError, AttributeError, UnicodeDecodeError) as e:

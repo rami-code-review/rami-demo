@@ -145,9 +145,6 @@ def import_transactions(
     inserted = []
     try:
         for row_num, row in enumerate(reader, start=2):
-            if row is None:
-                raise ValueError(f"Row {row_num}: malformed CSV row")
-
             try:
                 amount_str = row.get("amount", "").strip()
                 if not amount_str:
@@ -182,7 +179,7 @@ def import_transactions(
             inserted.append(create_transaction(conn, tx_in, autocommit=False))
 
         conn.commit()
-    except Exception:
+    except (ValueError, KeyError, AttributeError):
         conn.rollback()
         raise
 
