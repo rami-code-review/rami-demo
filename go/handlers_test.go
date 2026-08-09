@@ -182,16 +182,16 @@ func TestResolveExpiredLinkReturns404(t *testing.T) {
 
 	link, _ := s.Create("https://example.com", 3600)
 
+	s.now = func() time.Time {
+		return time.Date(2026, 6, 1, 13, 1, 0, 0, time.UTC)
+	}
+
 	h := &Handler{store: s, baseURL: "http://short.test"}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{code}", h.resolve)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	client := noRedirectClient()
-
-	s.now = func() time.Time {
-		return time.Date(2026, 6, 1, 13, 1, 0, 0, time.UTC)
-	}
 
 	resp, err := client.Get(srv.URL + "/" + link.Code)
 	if err != nil {
