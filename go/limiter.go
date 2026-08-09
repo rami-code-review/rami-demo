@@ -42,6 +42,11 @@ func (rl *RateLimiter) Allow(ip string) bool {
 	}
 
 	if len(reqs) >= rl.maxRequests {
+		if len(reqs) == 0 {
+			delete(rl.requestsPerIP, ip)
+		} else {
+			rl.requestsPerIP[ip] = reqs
+		}
 		return false
 	}
 
