@@ -86,8 +86,9 @@ def search_transactions(
     params: list = []
 
     if q:
-        query += " AND description LIKE ?"
-        params.append(f"%{q}%")
+        escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        query += " AND description LIKE ? ESCAPE '\\'"
+        params.append(f"%{escaped}%")
 
     if category:
         query += " AND category = ?"

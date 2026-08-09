@@ -73,3 +73,27 @@ def test_search_no_filters_returns_all(client: TestClient) -> None:
 
     rows = client.get("/transactions/search").json()
     assert len(rows) == 3
+
+
+def test_search_text_treats_wildcards_literally(client: TestClient) -> None:
+    _post(client, "10.00", "food", "50% off lunch", "2026-06-01")
+    _post(client, "50.00", "housing", "Rent", "2026-06-02")
+
+    rows = client.get("/transactions/search", params={"q": "%"}).json()
+    assert [row["description"] for row in rows] == ["50% off lunch"]
+
+
+def test_search_rejects_malformed_date(client: TestClient) -> None:
+    response = client.get("/transactions/search", params={"start": "June 2026"})
+    assert response.status_code == 422
+
+
+def test_search_date_range_boundaries_are_inclusive(client: TestClient) -> None:
+    _post(client, "10.00", "food", "On start", "2026-06-10")
+    _post(client, "20.00", "food", "In range", "2026-06-20")
+    _post(client, "30.00", "food", "On end", "2026-06-30")
+    _post(client, "40.00", "food", "Before", "2026-06-09")
+    _post(client, "50.00", "food", "After", "2026-07-01")
+
+    rows = client.get("/transactions/search", params={"start": "2026-06-10", "end": "2026-06-30"}).json()
+    assert sorted(row["description"] for row in rows) == ["In range", "On end", "On start"]

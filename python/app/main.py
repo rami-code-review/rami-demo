@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import sqlite3
 from collections.abc import AsyncIterator, Iterator
+from datetime import date
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -59,6 +60,12 @@ def search_transactions(
     conn: sqlite3.Connection = Depends(get_db),
 ) -> list[TransactionOut]:
     """Search transactions by free text, category, and date range."""
+    for label, value in (("start", start), ("end", end)):
+        if value is not None:
+            try:
+                date.fromisoformat(value)
+            except ValueError:
+                raise HTTPException(status_code=422, detail=f"{label} must be formatted YYYY-MM-DD")
     return storage.search_transactions(conn, q=q, category=category, start=start, end=end)
 
 
