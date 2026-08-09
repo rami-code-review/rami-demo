@@ -4,7 +4,7 @@ use std::process::ExitCode;
 use std::thread;
 use std::time::Duration;
 
-use logtail::{filter_available_mode, parse_args, Config, USAGE};
+use logtail::{filter_available, parse_args, Config, USAGE};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
 
@@ -36,12 +36,11 @@ fn run(config: &Config) -> io::Result<()> {
         reader.seek(SeekFrom::End(0))?;
     }
 
-    let filter = config.filter.as_deref();
     let stdout = io::stdout();
     loop {
         {
             let mut out = stdout.lock();
-            filter_available_mode(&mut reader, &mut out, filter, config.invert, config.regex_mode)?;
+            filter_available(&mut reader, &mut out, config.matcher.as_ref(), config.invert)?;
             out.flush()?;
         }
         thread::sleep(POLL_INTERVAL);
