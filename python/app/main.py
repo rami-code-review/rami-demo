@@ -50,6 +50,18 @@ def list_transactions(conn: sqlite3.Connection = Depends(get_db)) -> list[Transa
     return storage.list_transactions(conn)
 
 
+@app.get("/transactions/search", response_model=list[TransactionOut])
+def search_transactions(
+    q: str | None = None,
+    category: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+    conn: sqlite3.Connection = Depends(get_db),
+) -> list[TransactionOut]:
+    """Search transactions by free text, category, and date range."""
+    return storage.search_transactions(conn, q=q, category=category, start=start, end=end)
+
+
 @app.get("/transactions/{tx_id}", response_model=TransactionOut)
 def get_transaction(
     tx_id: int, conn: sqlite3.Connection = Depends(get_db)
