@@ -80,3 +80,32 @@ func TestRateLimiterIdleIPEviction(t *testing.T) {
 		t.Error("expected IP to still be in map after new request")
 	}
 }
+
+func TestRateLimiterMapEntryDeletedWhenExpired(t *testing.T) {
+	rl := NewRateLimiter(1, 60*time.Second)
+	fixed := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	rl.now = func() time.Time { return fixed }
+
+	if !rl.Allow("192.168.1.1") {
+		t.Error("initial request: expected Allow to return true")
+	}
+
+	if len(rl.requestsPerIP) != 1 {
+		t.Errorf("expected 1 IP in map after first request, got %d", len(rl.requestsPerIP))
+	}
+
+	fixed = time.Date(2026, 6, 1, 12, 2, 0, 0, time.UTC)
+	rl.now = func() time.Time { return fixed }
+
+	if !rl.Allow("192.168.1.1") {
+		t.Error("request after window expired: expected Allow to return true")
+	}
+
+	if len(rl.requestsPerIP) != 1 {
+		t.Errorf("expected 1 IP in map after request beyond window, got %d", len(rl.requestsPerIP))
+	}
+
+	if len(rl.requestsPerIP["192.168.1.1"]) != 1 {
+		t.Errorf("expected 1 timestamp for IP (old one filtered out), got %d", len(rl.requestsPerIP["192.168.1.1"]))
+	}
+}
