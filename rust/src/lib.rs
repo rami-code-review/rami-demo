@@ -75,7 +75,7 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, Par
 pub fn matches(line: &str, filter: Option<&str>, invert: bool) -> bool {
     match filter {
         Some(needle) => line.contains(needle) != invert,
-        None => true,
+        None => !invert,
     }
 }
 
@@ -226,7 +226,7 @@ mod tests {
     fn matches_inverts_filter_when_invert_is_true() {
         assert!(!matches("an ERROR line", Some("ERROR"), true));
         assert!(matches("an info line", Some("ERROR"), true));
-        assert!(matches("anything", None, true));
+        assert!(!matches("anything", None, true));
     }
 
     #[test]

@@ -87,9 +87,9 @@ fn invert_shows_non_matching_lines() {
     assert_eq!(String::from_utf8(out).unwrap(), "INFO boot\nINFO ok\n");
 }
 
-/// Inverted with no filter still shows all lines (consistent with empty filter logic).
+/// Inverted with no filter shows no lines (since no filter means all match, inverting shows none).
 #[test]
-fn invert_with_no_filter_shows_all() {
+fn invert_with_no_filter_shows_none() {
     let dir = tempdir().unwrap();
     let path = dir.path().join("app.log");
 
@@ -106,6 +106,6 @@ fn invert_with_no_filter_shows_all() {
 
     let mut out = Vec::new();
     let written = filter_available(&mut reader, &mut out, None, true).unwrap();
-    assert_eq!(written, 2);
-    assert_eq!(String::from_utf8(out).unwrap(), "any line\nanother\n");
+    assert_eq!(written, 0);
+    assert_eq!(String::from_utf8(out).unwrap(), "");
 }
