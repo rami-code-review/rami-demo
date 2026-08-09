@@ -6,7 +6,7 @@ import csv
 import io
 import sqlite3
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from .models import (
     CategoryTotal,
@@ -29,7 +29,7 @@ def _row_to_transaction(row: sqlite3.Row) -> TransactionOut:
     )
 
 
-def create_transaction(conn: sqlite3.Connection, tx: TransactionIn) -> TransactionOut:
+def create_transaction(conn: sqlite3.Connection, tx: TransactionIn, autocommit: bool = True) -> TransactionOut:
     """Insert a transaction and return the stored row."""
     row = conn.execute(
         "INSERT INTO transactions (amount_cents, category, description, date) "
@@ -39,7 +39,8 @@ def create_transaction(conn: sqlite3.Connection, tx: TransactionIn) -> Transacti
     ).fetchone()
     if row is None:
         raise RuntimeError("INSERT did not return a row")
-    conn.commit()
+    if autocommit:
+        conn.commit()
     return _row_to_transaction(row)
 
 
@@ -136,13 +137,53 @@ def import_transactions(
     if reader.fieldnames is None:
         raise ValueError("CSV is empty")
 
+    required_fields = {"amount", "category", "date"}
+    if not required_fields.issubset(set(reader.fieldnames)):
+        missing = required_fields - set(reader.fieldnames)
+        raise ValueError(f"Missing required columns: {', '.join(sorted(missing))}")
+
     inserted = []
-    for row in reader:
-        tx_in = TransactionIn(
-            amount=Decimal(row["amount"].strip()),
-            category=row["category"].strip(),
-            description=row.get("description", "").strip(),
-            date=date.fromisoformat(row["date"].strip()),
-        )
-        inserted.append(create_transaction(conn, tx_in))
+    try:
+        for row_num, row in enumerate(reader, start=2):
+            if row is None:
+                raise ValueError(f"Row {row_num}: malformed CSV row")
+
+            try:
+                amount_str = row.get("amount", "").strip()
+                if not amount_str:
+                    raise ValueError("amount field is empty")
+                try:
+                    amount = Decimal(amount_str)
+                except InvalidOperation as e:
+                    raise ValueError(f"amount '{amount_str}' is not a valid number") from e
+
+                category_str = row.get("category", "").strip()
+                if not category_str:
+                    raise ValueError("category field is empty")
+
+                date_str = row.get("date", "").strip()
+                if not date_str:
+                    raise ValueError("date field is empty")
+                date_val = date.fromisoformat(date_str)
+
+                tx_in = TransactionIn(
+                    amount=amount,
+                    category=category_str,
+                    description=row.get("description", "").strip(),
+                    date=date_val,
+                )
+            except (KeyError, AttributeError) as e:
+                raise ValueError(f"Row {row_num}: malformed CSV row - {e}") from e
+            except ValueError as e:
+                if "Row" in str(e):
+                    raise
+                raise ValueError(f"Row {row_num}: {e}") from e
+
+            inserted.append(create_transaction(conn, tx_in, autocommit=False))
+
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
     return inserted

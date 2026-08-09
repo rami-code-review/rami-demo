@@ -107,5 +107,5 @@ def import_transactions(
         content = file.file.read()
         csv_text = content.decode("utf-8")
         return storage.import_transactions(conn, csv_text)
-    except ValueError as e:
+    except (ValueError, KeyError, AttributeError, UnicodeDecodeError) as e:
         raise HTTPException(status_code=422, detail=str(e))
