@@ -15,11 +15,11 @@ func newTestStore() *Store {
 func TestCreateAssignsUniqueCodeAndZeroClicks(t *testing.T) {
 	s := newTestStore()
 
-	a, err := s.Create("https://example.com/one")
+	a, err := s.Create("https://example.com/one", 0)
 	if err != nil {
 		t.Fatalf("Create returned error: %v", err)
 	}
-	b, err := s.Create("https://example.com/two")
+	b, err := s.Create("https://example.com/two", 0)
 	if err != nil {
 		t.Fatalf("Create returned error: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestCreateAssignsUniqueCodeAndZeroClicks(t *testing.T) {
 
 func TestResolveIncrementsClicks(t *testing.T) {
 	s := newTestStore()
-	link, _ := s.Create("https://example.com")
+	link, _ := s.Create("https://example.com", 0)
 
 	for i := 1; i <= 3; i++ {
 		url, ok := s.Resolve(link.Code)
@@ -57,7 +57,7 @@ func TestResolveIncrementsClicks(t *testing.T) {
 
 func TestStatsDoesNotIncrementClicks(t *testing.T) {
 	s := newTestStore()
-	link, _ := s.Create("https://example.com")
+	link, _ := s.Create("https://example.com", 0)
 
 	s.Stats(link.Code)
 	s.Stats(link.Code)
@@ -72,5 +72,43 @@ func TestResolveUnknownCode(t *testing.T) {
 	s := newTestStore()
 	if _, ok := s.Resolve("missing"); ok {
 		t.Error("expected Resolve of unknown code to report not found")
+	}
+}
+
+func TestCreateWithExpiry(t *testing.T) {
+	s := newTestStore()
+	link, err := s.Create("https://example.com", 3600)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	if link.ExpiresAt == nil {
+		t.Error("expected ExpiresAt to be set")
+	}
+}
+
+func TestResolveBeforeExpiry(t *testing.T) {
+	s := newTestStore()
+	link, _ := s.Create("https://example.com", 3600)
+
+	url, ok := s.Resolve(link.Code)
+	if !ok {
+		t.Fatal("expected Resolve to succeed before expiry")
+	}
+	if url != "https://example.com" {
+		t.Errorf("got url %q, want https://example.com", url)
+	}
+}
+
+func TestResolveAfterExpiry(t *testing.T) {
+	s := newTestStore()
+	link, _ := s.Create("https://example.com", 3600)
+
+	s.now = func() time.Time {
+		return time.Date(2026, 6, 1, 13, 1, 0, 0, time.UTC)
+	}
+
+	_, ok := s.Resolve(link.Code)
+	if ok {
+		t.Error("expected Resolve to fail after expiry")
 	}
 }
