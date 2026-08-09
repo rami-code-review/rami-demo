@@ -137,7 +137,12 @@ func TestStatsUnknownReturns404(t *testing.T) {
 }
 
 func TestShortenWithExpiry(t *testing.T) {
-	srv := newTestServer()
+	s := newTestStore()
+	h := &Handler{store: s, baseURL: "http://short.test"}
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /shorten", h.shorten)
+	mux.HandleFunc("GET /api/stats/{code}", h.stats)
+	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	client := noRedirectClient()
 
@@ -164,10 +169,17 @@ func TestShortenWithExpiry(t *testing.T) {
 	if link.ExpiresAt == nil {
 		t.Error("expected ExpiresAt to be set in response")
 	}
+	expectedExpiry := link.CreatedAt.Add(3600 * time.Second)
+	if !link.ExpiresAt.Equal(expectedExpiry) {
+		t.Errorf("ExpiresAt = %v, want %v", link.ExpiresAt, expectedExpiry)
+	}
 }
 
 func TestResolveExpiredLinkReturns404(t *testing.T) {
-	s := newTestStore()
+	s := &Store{links: make(map[string]*Link)}
+	baseTime := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return baseTime }
+
 	link, _ := s.Create("https://example.com", 3600)
 
 	h := &Handler{store: s, baseURL: "http://short.test"}
