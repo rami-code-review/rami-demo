@@ -68,6 +68,15 @@ func (h *Handler) shorten(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "url must be an absolute http or https URL")
 		return
 	}
+	if req.ExpiresInSeconds < 0 {
+		writeError(w, http.StatusBadRequest, "expires_in_seconds must be non-negative")
+		return
+	}
+	const maxExpiresInSeconds = 315360000
+	if req.ExpiresInSeconds > maxExpiresInSeconds {
+		writeError(w, http.StatusBadRequest, "expires_in_seconds must be at most 10 years")
+		return
+	}
 
 	link, err := h.store.Create(req.URL, req.ExpiresInSeconds)
 	if err != nil {

@@ -190,3 +190,27 @@ func TestResolveExpiredLinkReturns404(t *testing.T) {
 		t.Errorf("status = %d, want 404", resp.StatusCode)
 	}
 }
+
+func TestShortenRejectsNegativeExpiry(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	resp := shorten(t, srv, `{"url":"https://example.com","expires_in_seconds":-1}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestShortenRejectsExcessiveExpiry(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	resp := shorten(t, srv, `{"url":"https://example.com","expires_in_seconds":315360001}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
