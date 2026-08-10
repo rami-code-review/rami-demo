@@ -18,6 +18,14 @@ from .models import (
 )
 
 
+class RowError(ValueError):
+    """Exception raised when a CSV row cannot be processed. Carries row number."""
+
+    def __init__(self, row_num: int, message: str) -> None:
+        self.row_num = row_num
+        super().__init__(f"Row {row_num}: {message}")
+
+
 def _row_to_transaction(row: sqlite3.Row) -> TransactionOut:
     """Map a database row to a TransactionOut."""
     return TransactionOut(
@@ -143,24 +151,24 @@ def import_transactions(
         raise ValueError(f"Missing required columns: {', '.join(sorted(missing))}")
 
     inserted = []
-    try:
+    with conn:
         for row_num, row in enumerate(reader, start=2):
             try:
                 amount_str = row.get("amount", "").strip()
                 if not amount_str:
-                    raise ValueError("amount field is empty")
+                    raise RowError(row_num, "amount field is empty")
                 try:
                     amount = Decimal(amount_str)
                 except InvalidOperation as e:
-                    raise ValueError(f"amount '{amount_str}' is not a valid number") from e
+                    raise RowError(row_num, f"amount '{amount_str}' is not a valid number") from e
 
                 category_str = row.get("category", "").strip()
                 if not category_str:
-                    raise ValueError("category field is empty")
+                    raise RowError(row_num, "category field is empty")
 
                 date_str = row.get("date", "").strip()
                 if not date_str:
-                    raise ValueError("date field is empty")
+                    raise RowError(row_num, "date field is empty")
                 date_val = date.fromisoformat(date_str)
 
                 tx_in = TransactionIn(
@@ -170,17 +178,8 @@ def import_transactions(
                     date=date_val,
                 )
             except (KeyError, AttributeError) as e:
-                raise ValueError(f"Row {row_num}: malformed CSV row - {e}") from e
-            except ValueError as e:
-                if "Row" in str(e):
-                    raise
-                raise ValueError(f"Row {row_num}: {e}") from e
+                raise RowError(row_num, f"malformed CSV row - {e}") from e
 
             inserted.append(create_transaction(conn, tx_in, autocommit=False))
-
-        conn.commit()
-    except (ValueError, KeyError, AttributeError):
-        conn.rollback()
-        raise
 
     return inserted

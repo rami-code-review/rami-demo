@@ -13,6 +13,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, UploadFile
 from . import storage
 from .db import closing_connection, init_db
 from .models import Summary, TransactionIn, TransactionOut
+from .storage import RowError
 
 MONTH_PATTERN = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
@@ -110,5 +111,5 @@ def import_transactions(
             raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
         csv_text = content.decode("utf-8")
         return storage.import_transactions(conn, csv_text)
-    except (ValueError, KeyError, AttributeError, UnicodeDecodeError) as e:
+    except (RowError, ValueError, KeyError, AttributeError, UnicodeDecodeError) as e:
         raise HTTPException(status_code=422, detail=str(e))
