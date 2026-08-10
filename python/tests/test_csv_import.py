@@ -88,6 +88,21 @@ amount,category,description,date
     assert "row" in detail.lower()
 
 
+def test_import_csv_rejects_invalid_date(client: TestClient) -> None:
+    csv_content = """\
+amount,category,description,date
+12.50,food,Lunch,2026-13-40
+"""
+    response = client.post(
+        "/transactions/import",
+        files={"file": ("test.csv", BytesIO(csv_content.encode()), "text/csv")},
+    )
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert "row" in detail.lower()
+    assert "2" in detail
+
+
 def test_import_csv_partial_failure_does_not_commit(client: TestClient) -> None:
     initial_response = client.get("/transactions")
     initial_count = len(initial_response.json())

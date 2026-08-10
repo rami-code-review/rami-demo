@@ -169,7 +169,10 @@ def import_transactions(
                 date_str = row.get("date", "").strip()
                 if not date_str:
                     raise RowError(row_num, "date field is empty")
-                date_val = date.fromisoformat(date_str)
+                try:
+                    date_val = date.fromisoformat(date_str)
+                except ValueError as e:
+                    raise RowError(row_num, f"date '{date_str}' is invalid") from e
 
                 tx_in = TransactionIn(
                     amount=amount,
