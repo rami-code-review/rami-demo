@@ -4,7 +4,7 @@ use std::process::ExitCode;
 use std::thread;
 use std::time::Duration;
 
-use logtail::{filter_available, parse_args, Config, USAGE};
+use logtail::{filter_available_with_prefix, parse_args, Config, USAGE};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
 
@@ -21,26 +21,53 @@ fn main() -> ExitCode {
     match run(&config) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-            eprintln!("logtail: {}: {err}", config.path);
+            let first_path = config.paths.first().map(|s| s.as_str()).unwrap_or("unknown");
+            eprintln!("logtail: {}: {err}", first_path);
             ExitCode::FAILURE
         }
     }
 }
 
-/// Follow the configured file, printing matching lines as they arrive.
+/// Follow the configured files, printing matching lines as they arrive.
 fn run(config: &Config) -> io::Result<()> {
-    let file = File::open(&config.path)?;
-    let mut reader = BufReader::new(file);
-
-    if !config.from_start {
-        reader.seek(SeekFrom::End(0))?;
+    struct FileReader {
+        reader: BufReader<File>,
+        path: String,
     }
 
+    let mut readers: Vec<FileReader> = Vec::new();
+    for path in &config.paths {
+        let file = File::open(path)?;
+        let mut reader = BufReader::new(file);
+        if !config.from_start {
+            reader.seek(SeekFrom::End(0))?;
+        }
+        readers.push(FileReader {
+            reader,
+            path: path.clone(),
+        });
+    }
+
+    let show_prefix = config.paths.len() > 1;
     let stdout = io::stdout();
     loop {
         {
             let mut out = stdout.lock();
-            filter_available(&mut reader, &mut out, config.matcher.as_ref(), config.invert, config.since)?;
+            for file_reader in &mut readers {
+                let prefix = if show_prefix {
+                    Some(file_reader.path.as_str())
+                } else {
+                    None
+                };
+                filter_available_with_prefix(
+                    &mut file_reader.reader,
+                    &mut out,
+                    config.matcher.as_ref(),
+                    config.invert,
+                    config.since,
+                    prefix,
+                )?;
+            }
             out.flush()?;
         }
         thread::sleep(POLL_INTERVAL);
