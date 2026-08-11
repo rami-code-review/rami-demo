@@ -32,7 +32,11 @@ export function createApp(store: TaskStore = new TaskStore()): Express {
     const tagValue = Array.isArray(tagParam) ? tagParam[0] : tagParam;
     const tag =
       tagValue === undefined || tagValue === "" ? undefined : String(tagValue);
-    return res.json(store.list(status, tag));
+    const searchParam = req.query.search;
+    const searchValue = Array.isArray(searchParam) ? searchParam[0] : searchParam;
+    const search =
+      searchValue === undefined || searchValue === "" ? undefined : String(searchValue);
+    return res.json(store.list(status, tag, search));
   });
 
   app.get<{ id: string }>("/tasks/:id", (req, res) => {

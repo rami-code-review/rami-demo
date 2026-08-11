@@ -21,7 +21,7 @@ export class TaskStore {
     return this.tasks.get(id);
   }
 
-  list(status: TaskStatus = "all", tag?: string): Task[] {
+  list(status: TaskStatus = "all", tag?: string, search?: string): Task[] {
     const all = [...this.tasks.values()].sort((a, b) =>
       a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0,
     );
@@ -30,6 +30,10 @@ export class TaskStore {
     if (status === "done") filtered = all.filter((t) => t.done);
     if (tag !== undefined) {
       filtered = filtered.filter((t) => t.tags && t.tags.includes(tag));
+    }
+    if (search !== undefined) {
+      const lowerSearch = search.toLowerCase();
+      filtered = filtered.filter((t) => t.title.toLowerCase().includes(lowerSearch));
     }
     return filtered;
   }

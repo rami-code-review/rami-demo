@@ -119,6 +119,40 @@ describe("GET /tasks", () => {
     const result = await request(api).get("/tasks?tag=work&status=active");
     expect(result.body.map((t: { title: string }) => t.title)).toEqual(["active work"]);
   });
+
+  it("filters by search query", async () => {
+    const api = app();
+    await request(api).post("/tasks").send({ title: "buy milk" });
+    await request(api).post("/tasks").send({ title: "drink milk" });
+    await request(api).post("/tasks").send({ title: "feed the cat" });
+
+    const result = await request(api).get("/tasks?search=milk");
+    expect(result.body.length).toBe(2);
+    expect(result.body.map((t: { title: string }) => t.title).sort()).toEqual(["buy milk", "drink milk"]);
+  });
+
+  it("searches case-insensitively", async () => {
+    const api = app();
+    await request(api).post("/tasks").send({ title: "Buy Milk" });
+    await request(api).post("/tasks").send({ title: "DRINK COFFEE" });
+
+    const result = await request(api).get("/tasks?search=milk");
+    expect(result.body.length).toBe(1);
+    expect(result.body[0].title).toBe("Buy Milk");
+  });
+
+  it("composes search with status and tag filters", async () => {
+    const api = app();
+    const t1 = await request(api).post("/tasks").send({ title: "buy milk", tags: ["shopping"] });
+    const t2 = await request(api).post("/tasks").send({ title: "drink milk", tags: ["shopping"] });
+    const t3 = await request(api).post("/tasks").send({ title: "buy coffee", tags: ["shopping"] });
+
+    await request(api).patch(`/tasks/${t2.body.id}`).send({ done: true });
+
+    const result = await request(api).get("/tasks?search=milk&status=active&tag=shopping");
+    expect(result.body.length).toBe(1);
+    expect(result.body[0].title).toBe("buy milk");
+  });
 });
 
 describe("GET /tasks/:id", () => {
