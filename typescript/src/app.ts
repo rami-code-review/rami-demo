@@ -89,5 +89,29 @@ export function createApp(store: TaskStore = new TaskStore()): Express {
     return res.status(204).end();
   });
 
+  app.post("/tasks/bulk/action", (req: Request, res: Response) => {
+    const ids = req.body?.ids;
+    const action = req.body?.action;
+
+    if (!Array.isArray(ids)) {
+      return res.status(400).json({ error: "ids must be an array" });
+    }
+
+    if (!ids.every((id): id is string => typeof id === "string")) {
+      return res.status(400).json({ error: "each id must be a string" });
+    }
+
+    if (action !== "complete" && action !== "delete") {
+      return res.status(400).json({ error: "action must be one of: complete, delete" });
+    }
+
+    try {
+      const result = store.bulkAction(ids, action);
+      return res.json(result);
+    } catch (err) {
+      return res.status(500).json({ error: "internal server error" });
+    }
+  });
+
   return app;
 }

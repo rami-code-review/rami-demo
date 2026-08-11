@@ -228,6 +228,115 @@ describe("DELETE /tasks/:id", () => {
   });
 });
 
+describe("POST /tasks/bulk/action", () => {
+  it("completes multiple tasks", async () => {
+    const api = app();
+    const t1 = await request(api).post("/tasks").send({ title: "first" });
+    const t2 = await request(api).post("/tasks").send({ title: "second" });
+    const t3 = await request(api).post("/tasks").send({ title: "third" });
+
+    const res = await request(api).post("/tasks/bulk/action").send({
+      ids: [t1.body.id, t2.body.id, t3.body.id],
+      action: "complete",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.succeeded).toBe(3);
+    expect(res.body.failed).toBe(0);
+    expect(res.body.failedIds).toEqual([]);
+
+    const done = await request(api).get("/tasks?status=done");
+    expect(done.body.length).toBe(3);
+  });
+
+  it("deletes multiple tasks", async () => {
+    const api = app();
+    const t1 = await request(api).post("/tasks").send({ title: "delete 1" });
+    const t2 = await request(api).post("/tasks").send({ title: "delete 2" });
+    const t3 = await request(api).post("/tasks").send({ title: "keep me" });
+
+    const res = await request(api).post("/tasks/bulk/action").send({
+      ids: [t1.body.id, t2.body.id],
+      action: "delete",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.succeeded).toBe(2);
+    expect(res.body.failed).toBe(0);
+
+    const all = await request(api).get("/tasks");
+    expect(all.body.length).toBe(1);
+    expect(all.body[0].title).toBe("keep me");
+  });
+
+  it("handles mix of existing and missing ids", async () => {
+    const api = app();
+    const t1 = await request(api).post("/tasks").send({ title: "exists" });
+
+    const res = await request(api).post("/tasks/bulk/action").send({
+      ids: [t1.body.id, "nonexistent1", "nonexistent2"],
+      action: "complete",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.succeeded).toBe(1);
+    expect(res.body.failed).toBe(2);
+    expect(res.body.failedIds).toContain("nonexistent1");
+    expect(res.body.failedIds).toContain("nonexistent2");
+
+    const done = await request(api).get("/tasks?status=done");
+    expect(done.body[0].id).toBe(t1.body.id);
+  });
+
+  it("rejects non-array ids", async () => {
+    const res = await request(app()).post("/tasks/bulk/action").send({
+      ids: "not-an-array",
+      action: "complete",
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("ids must be an array");
+  });
+
+  it("rejects invalid action", async () => {
+    const res = await request(app()).post("/tasks/bulk/action").send({
+      ids: ["some-id"],
+      action: "invalid",
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("action must be one of");
+  });
+
+  it("deduplicates ids and counts each task once", async () => {
+    const api = app();
+    const t1 = await request(api).post("/tasks").send({ title: "dedupe test" });
+
+    const res = await request(api).post("/tasks/bulk/action").send({
+      ids: [t1.body.id, t1.body.id],
+      action: "complete",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.succeeded).toBe(1);
+    expect(res.body.failed).toBe(0);
+    expect(res.body.failedIds).toEqual([]);
+
+    const done = await request(api).get("/tasks?status=done");
+    expect(done.body.length).toBe(1);
+  });
+
+  it("rejects non-string ids", async () => {
+    const res = await request(app()).post("/tasks/bulk/action").send({
+      ids: ["valid-id", 123, null],
+      action: "complete",
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("each id must be a string");
+  });
+});
+
 describe("TaskStore.list", () => {
   it("returns tasks with the more recent createdAt first", () => {
     const store = new TaskStore();
