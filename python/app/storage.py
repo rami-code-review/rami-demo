@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import sqlite3
 from datetime import date
+from decimal import Decimal, InvalidOperation
 
 from .models import (
     CategoryTotal,
@@ -13,6 +16,14 @@ from .models import (
     from_cents,
     to_cents,
 )
+
+
+class RowError(ValueError):
+    """Exception raised when a CSV row cannot be processed. Carries row number."""
+
+    def __init__(self, row_num: int, message: str) -> None:
+        self.row_num = row_num
+        super().__init__(f"Row {row_num}: {message}")
 
 
 def _row_to_transaction(row: sqlite3.Row) -> TransactionOut:
@@ -26,7 +37,7 @@ def _row_to_transaction(row: sqlite3.Row) -> TransactionOut:
     )
 
 
-def create_transaction(conn: sqlite3.Connection, tx: TransactionIn) -> TransactionOut:
+def create_transaction(conn: sqlite3.Connection, tx: TransactionIn, autocommit: bool = True) -> TransactionOut:
     """Insert a transaction and return the stored row."""
     row = conn.execute(
         "INSERT INTO transactions (amount_cents, category, description, date) "
@@ -36,7 +47,8 @@ def create_transaction(conn: sqlite3.Connection, tx: TransactionIn) -> Transacti
     ).fetchone()
     if row is None:
         raise RuntimeError("INSERT did not return a row")
-    conn.commit()
+    if autocommit:
+        conn.commit()
     return _row_to_transaction(row)
 
 
@@ -123,3 +135,54 @@ def monthly_summary(conn: sqlite3.Connection, month: str) -> Summary:
     ]
     overall = sum((row["total_cents"] for row in rows), 0)
     return Summary(month=month, totals=totals, total=from_cents(overall))
+
+
+def import_transactions(
+    conn: sqlite3.Connection, csv_content: str
+) -> list[TransactionOut]:
+    """Parse and insert transactions from CSV content. Expected columns: amount, category, description, date."""
+    reader = csv.DictReader(io.StringIO(csv_content))
+    if reader.fieldnames is None:
+        raise ValueError("CSV is empty")
+
+    required_fields = {"amount", "category", "date"}
+    if not required_fields.issubset(set(reader.fieldnames)):
+        missing = required_fields - set(reader.fieldnames)
+        raise ValueError(f"Missing required columns: {', '.join(sorted(missing))}")
+
+    inserted = []
+    with conn:
+        for row_num, row in enumerate(reader, start=2):
+            try:
+                amount_str = row.get("amount", "").strip()
+                if not amount_str:
+                    raise RowError(row_num, "amount field is empty")
+                try:
+                    amount = Decimal(amount_str)
+                except InvalidOperation as e:
+                    raise RowError(row_num, f"amount '{amount_str}' is not a valid number") from e
+
+                category_str = row.get("category", "").strip()
+                if not category_str:
+                    raise RowError(row_num, "category field is empty")
+
+                date_str = row.get("date", "").strip()
+                if not date_str:
+                    raise RowError(row_num, "date field is empty")
+                try:
+                    date_val = date.fromisoformat(date_str)
+                except ValueError as e:
+                    raise RowError(row_num, f"date '{date_str}' is invalid") from e
+
+                tx_in = TransactionIn(
+                    amount=amount,
+                    category=category_str,
+                    description=row.get("description", "").strip(),
+                    date=date_val,
+                )
+            except (KeyError, AttributeError) as e:
+                raise RowError(row_num, f"malformed CSV row - {e}") from e
+
+            inserted.append(create_transaction(conn, tx_in, autocommit=False))
+
+    return inserted
