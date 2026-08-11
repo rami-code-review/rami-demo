@@ -120,3 +120,15 @@ func (s *Store) Stats(code string) (Link, bool) {
 	}
 	return *link, true
 }
+
+// AllLinks returns a snapshot of all links in the store.
+func (s *Store) AllLinks() []Link {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	links := make([]Link, 0, len(s.links))
+	for _, link := range s.links {
+		links = append(links, *link)
+	}
+	return links
+}

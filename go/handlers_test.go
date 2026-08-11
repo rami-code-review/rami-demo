@@ -574,3 +574,85 @@ func TestShortenWithMaxClicksViaAPI(t *testing.T) {
 	}
 	resolveResp.Body.Close()
 }
+
+func TestAdminEndpointListsAllLinks(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	shorten(t, srv, `{"url":"https://example.com/one"}`)
+	shorten(t, srv, `{"url":"https://example.com/two"}`)
+
+	resp, err := http.Get(srv.URL + "/api/admin/links")
+	if err != nil {
+		t.Fatalf("GET /api/admin/links: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+
+	var links []Link
+	if err := json.NewDecoder(resp.Body).Decode(&links); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if len(links) != 2 {
+		t.Errorf("expected 2 links, got %d", len(links))
+	}
+
+	urls := make(map[string]bool)
+	for _, link := range links {
+		urls[link.URL] = true
+		if link.Clicks != 0 {
+			t.Errorf("link %s should have 0 clicks, got %d", link.Code, link.Clicks)
+		}
+	}
+
+	if !urls["https://example.com/one"] || !urls["https://example.com/two"] {
+		t.Error("expected both URLs in response")
+	}
+}
+
+func TestAdminEndpointIncludesClickStats(t *testing.T) {
+	s := newTestStore()
+	h := &Handler{
+		store:       s,
+		baseURL:     "http://short.test",
+		rateLimiter: NewRateLimiter(10, 60*time.Second),
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /shorten", h.shorten)
+	mux.HandleFunc("GET /api/admin/links", h.admin)
+	mux.HandleFunc("GET /{code}", h.resolve)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	client := noRedirectClient()
+
+	resp := shorten(t, srv, `{"url":"https://example.com/dest"}`)
+	var out shortenResponse
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	resp.Body.Close()
+
+	client.Get(srv.URL + "/" + out.Code)
+	client.Get(srv.URL + "/" + out.Code)
+
+	adminResp, err := http.Get(srv.URL + "/api/admin/links")
+	if err != nil {
+		t.Fatalf("GET /api/admin/links: %v", err)
+	}
+	defer adminResp.Body.Close()
+
+	var links []Link
+	if err := json.NewDecoder(adminResp.Body).Decode(&links); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	if len(links) != 1 {
+		t.Errorf("expected 1 link, got %d", len(links))
+	}
+
+	if links[0].Clicks != 2 {
+		t.Errorf("expected 2 clicks, got %d", links[0].Clicks)
+	}
+}
