@@ -8,6 +8,7 @@ export interface Task {
   tags?: string[];
   recurrence?: Recurrence;
   dueDate?: string;
+  order?: number;
 }
 
 export type TaskStatus = "all" | "active" | "done";

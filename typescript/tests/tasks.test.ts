@@ -63,13 +63,13 @@ describe("POST /tasks", () => {
 });
 
 describe("GET /tasks", () => {
-  it("lists tasks newest first", async () => {
+  it("lists tasks in creation order", async () => {
     const api = app();
     await request(api).post("/tasks").send({ title: "first" });
     await request(api).post("/tasks").send({ title: "second" });
     const res = await request(api).get("/tasks");
     expect(res.status).toBe(200);
-    expect(res.body.map((t: { title: string }) => t.title)).toEqual(["second", "first"]);
+    expect(res.body.map((t: { title: string }) => t.title)).toEqual(["first", "second"]);
   });
 
   it("filters by status", async () => {
@@ -387,6 +387,55 @@ describe("TaskStore.list", () => {
     store.update(done.id, { done: true });
     expect(store.list("active").map((t) => t.id)).toEqual([keep.id]);
     expect(store.list("done").map((t) => t.id)).toEqual([done.id]);
+  });
+});
+
+describe("POST /tasks/reorder", () => {
+  it("reorders tasks and returns them in the new order", async () => {
+    const api = app();
+    const t1 = await request(api).post("/tasks").send({ title: "first" });
+    const t2 = await request(api).post("/tasks").send({ title: "second" });
+    const t3 = await request(api).post("/tasks").send({ title: "third" });
+
+    const res = await request(api).post("/tasks/reorder").send({
+      ids: [t3.body.id, t1.body.id, t2.body.id],
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    const list = await request(api).get("/tasks");
+    expect(list.body.map((t: { title: string }) => t.title)).toEqual(["third", "first", "second"]);
+  });
+
+  it("rejects non-array ids", async () => {
+    const res = await request(app()).post("/tasks/reorder").send({
+      ids: "not-an-array",
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("ids must be an array");
+  });
+
+  it("rejects non-string ids", async () => {
+    const res = await request(app()).post("/tasks/reorder").send({
+      ids: ["valid-id", 123],
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("each id must be a string");
+  });
+
+  it("rejects if any id does not exist", async () => {
+    const api = app();
+    const t1 = await request(api).post("/tasks").send({ title: "exists" });
+
+    const res = await request(api).post("/tasks/reorder").send({
+      ids: [t1.body.id, "nonexistent"],
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("one or more task ids not found");
   });
 });
 

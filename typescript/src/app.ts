@@ -121,5 +121,23 @@ export function createApp(store: TaskStore = new TaskStore()): Express {
     }
   });
 
+  app.post("/tasks/reorder", (req: Request, res: Response) => {
+    const ids = req.body?.ids;
+
+    if (!Array.isArray(ids)) {
+      return res.status(400).json({ error: "ids must be an array" });
+    }
+
+    if (!ids.every((id): id is string => typeof id === "string")) {
+      return res.status(400).json({ error: "each id must be a string" });
+    }
+
+    if (!store.reorder(ids)) {
+      return res.status(400).json({ error: "one or more task ids not found" });
+    }
+
+    return res.json({ success: true });
+  });
+
   return app;
 }
