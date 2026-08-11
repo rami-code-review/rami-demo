@@ -148,3 +148,30 @@ fn multiple_files_with_prefix() {
     assert!(output.contains("app1.log: line from first"));
     assert!(output.contains("app2.log: line from second"));
 }
+
+/// Multiple files where one exists and one is missing: present file continues.
+#[test]
+fn one_missing_file_continues_with_existing() {
+    let dir = tempdir().unwrap();
+    let existing_path = dir.path().join("existing.log");
+    let missing_path = dir.path().join("missing.log");
+
+    let mut writer = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&existing_path)
+        .unwrap();
+    writeln!(writer, "line from existing").unwrap();
+    writer.flush().unwrap();
+
+    let mut existing_reader = BufReader::new(File::open(&existing_path).unwrap());
+
+    let mut out = Vec::new();
+    let written = filter_available_with_prefix(&mut existing_reader, &mut out, None, false, None, Some("existing.log")).unwrap();
+
+    assert_eq!(written, 1);
+    let output = String::from_utf8(out).unwrap();
+    assert_eq!(output, "existing.log: line from existing\n");
+
+    File::open(&missing_path).expect_err("should not be able to open missing file");
+}

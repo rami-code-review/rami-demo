@@ -21,8 +21,12 @@ fn main() -> ExitCode {
     match run(&config) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-            let first_path = config.paths.first().map(|s| s.as_str()).unwrap_or("unknown");
-            eprintln!("logtail: {}: {err}", first_path);
+            if err.kind() != io::ErrorKind::NotFound {
+                let first_path = config.paths.first().map(|s| s.as_str()).unwrap_or("unknown");
+                eprintln!("logtail: {}: {err}", first_path);
+            } else {
+                eprintln!("logtail: {err}");
+            }
             ExitCode::FAILURE
         }
     }
@@ -37,15 +41,28 @@ fn run(config: &Config) -> io::Result<()> {
 
     let mut readers: Vec<FileReader> = Vec::new();
     for path in &config.paths {
-        let file = File::open(path)?;
-        let mut reader = BufReader::new(file);
-        if !config.from_start {
-            reader.seek(SeekFrom::End(0))?;
+        match File::open(path) {
+            Ok(file) => {
+                let mut reader = BufReader::new(file);
+                if !config.from_start {
+                    reader.seek(SeekFrom::End(0))?;
+                }
+                readers.push(FileReader {
+                    reader,
+                    path: path.clone(),
+                });
+            }
+            Err(err) => {
+                eprintln!("logtail: {}: {err}", path);
+            }
         }
-        readers.push(FileReader {
-            reader,
-            path: path.clone(),
-        });
+    }
+
+    if readers.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "could not open any of the specified files",
+        ));
     }
 
     let show_prefix = config.paths.len() > 1;
