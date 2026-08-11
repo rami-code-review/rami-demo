@@ -29,6 +29,13 @@ CREATE TABLE IF NOT EXISTS recurring_rules (
     start_date   TEXT    NOT NULL,
     end_date     TEXT
 );
+CREATE TABLE IF NOT EXISTS budgets (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    category     TEXT    NOT NULL,
+    month        TEXT    NOT NULL,
+    amount_cents INTEGER NOT NULL,
+    UNIQUE(category, month)
+);
 """
 
 

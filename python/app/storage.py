@@ -10,6 +10,9 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from .models import (
+    BudgetIn,
+    BudgetOut,
+    BudgetStatus,
     CategoryTotal,
     RecurringRuleIn,
     RecurringRuleOut,
@@ -332,3 +335,58 @@ def generate_due_transactions(conn: sqlite3.Connection, up_to: date) -> list[Tra
                     generated.append(_row_to_transaction(tx_row))
 
     return generated
+
+
+def create_budget(conn: sqlite3.Connection, budget: BudgetIn) -> BudgetOut:
+    """Insert or replace a budget and return the stored row."""
+    row = conn.execute(
+        "INSERT INTO budgets (category, month, amount_cents) "
+        "VALUES (?, ?, ?) "
+        "ON CONFLICT(category, month) DO UPDATE SET amount_cents = excluded.amount_cents "
+        "RETURNING id, category, month, amount_cents",
+        (budget.category.value, budget.month, to_cents(budget.amount)),
+    ).fetchone()
+    if row is None:
+        raise RuntimeError("INSERT did not return a row")
+    conn.commit()
+    return BudgetOut(
+        id=row["id"],
+        category=row["category"],
+        month=row["month"],
+        amount=from_cents(row["amount_cents"]),
+    )
+
+
+def get_budget_status(conn: sqlite3.Connection, category: str, month: str) -> BudgetStatus | None:
+    """Get the budget status for a category in a given month."""
+    budget_row = conn.execute(
+        "SELECT id, amount_cents FROM budgets WHERE category = ? AND month = ?",
+        (category, month),
+    ).fetchone()
+
+    if budget_row is None:
+        return None
+
+    cap_cents = budget_row["amount_cents"]
+
+    start, end = _month_bounds(month)
+    spent_row = conn.execute(
+        "SELECT COALESCE(SUM(amount_cents), 0) AS total_cents "
+        "FROM transactions WHERE category = ? AND date >= ? AND date < ?",
+        (category, start, end),
+    ).fetchone()
+    spent_cents = spent_row["total_cents"] if spent_row else 0
+
+    remaining_cents = cap_cents - spent_cents
+    percentage = Decimal(0)
+    if cap_cents > 0:
+        percentage = (Decimal(spent_cents) / Decimal(cap_cents) * Decimal(100)).quantize(Decimal("0.01"))
+
+    return BudgetStatus(
+        category=category,
+        month=month,
+        cap=from_cents(cap_cents),
+        spent=from_cents(spent_cents),
+        remaining=from_cents(remaining_cents),
+        percentage=percentage,
+    )
