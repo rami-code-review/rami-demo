@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import sqlite3
+from collections.abc import Iterator
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
@@ -135,6 +136,50 @@ def monthly_summary(conn: sqlite3.Connection, month: str) -> Summary:
     ]
     overall = sum((row["total_cents"] for row in rows), 0)
     return Summary(month=month, totals=totals, total=from_cents(overall))
+
+
+def _neutralize_formula_injection(value: str) -> str:
+    """Prefix cells that start with formula indicators to prevent injection attacks."""
+    if value and value[0] in ("=", "+", "-", "@", "\t", "\r"):
+        return "'" + value
+    return value
+
+
+def export_transactions(conn: sqlite3.Connection) -> str:
+    """Export all transactions as CSV content with columns: amount, category, description, date."""
+    transactions = list_transactions(conn)
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=["amount", "category", "description", "date"])
+    writer.writeheader()
+    for tx in transactions:
+        writer.writerow({
+            "amount": _neutralize_formula_injection(str(tx.amount)),
+            "category": _neutralize_formula_injection(tx.category.value),
+            "description": _neutralize_formula_injection(tx.description),
+            "date": _neutralize_formula_injection(tx.date.isoformat()),
+        })
+    return output.getvalue()
+
+
+def export_transactions_stream(conn: sqlite3.Connection) -> Iterator[str]:
+    """Stream all transactions as CSV with formula injection protection, yielding one line at a time."""
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=["amount", "category", "description", "date"])
+    writer.writeheader()
+    yield output.getvalue()
+    output.truncate(0)
+    output.seek(0)
+
+    for tx in list_transactions(conn):
+        output.truncate(0)
+        output.seek(0)
+        writer.writerow({
+            "amount": _neutralize_formula_injection(str(tx.amount)),
+            "category": _neutralize_formula_injection(tx.category.value),
+            "description": _neutralize_formula_injection(tx.description),
+            "date": _neutralize_formula_injection(tx.date.isoformat()),
+        })
+        yield output.getvalue()
 
 
 def import_transactions(

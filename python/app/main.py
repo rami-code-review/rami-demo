@@ -8,7 +8,8 @@ from collections.abc import AsyncIterator, Iterator
 from datetime import date
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Query, Response, UploadFile
+from fastapi.responses import StreamingResponse
 
 from . import storage
 from .db import closing_connection, init_db
@@ -68,6 +69,16 @@ def search_transactions(
             except ValueError:
                 raise HTTPException(status_code=422, detail=f"{label} must be formatted YYYY-MM-DD")
     return storage.search_transactions(conn, q=q, category=category, start=start, end=end)
+
+
+@app.get("/transactions/export")
+def export_transactions(conn: sqlite3.Connection = Depends(get_db)) -> StreamingResponse:
+    """Export all transactions as a CSV file."""
+    return StreamingResponse(
+        storage.export_transactions_stream(conn),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=transactions.csv"}
+    )
 
 
 @app.get("/transactions/{tx_id}", response_model=TransactionOut)
