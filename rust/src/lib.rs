@@ -22,8 +22,8 @@ impl Matcher {
 /// How `logtail` was configured to run.
 #[derive(Debug)]
 pub struct Config {
-    /// The file to follow.
-    pub path: String,
+    /// The files to follow.
+    pub paths: Vec<String>,
     /// Compiled matcher (either substring or regex); `None` keeps every line.
     pub matcher: Option<Matcher>,
     /// Read existing content before following; otherwise start at end of file.
@@ -47,7 +47,7 @@ impl std::fmt::Display for ParseError {
 impl std::error::Error for ParseError {}
 
 /// The usage string shown on a parse error or `--help`.
-pub const USAGE: &str = "usage: logtail [--filter <substring>] [--regex] [--invert] [--from-start] [--since <timestamp>] <file>";
+pub const USAGE: &str = "usage: logtail [--filter <substring>] [--regex] [--invert] [--from-start] [--since <timestamp>] <file> [<file> ...]";
 
 /// Parse command-line arguments (excluding the program name) into a [`Config`].
 pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, ParseError> {
@@ -56,7 +56,7 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, Par
     let mut invert = false;
     let mut regex_mode = false;
     let mut since = None;
-    let mut path = None;
+    let mut paths = Vec::new();
 
     let mut iter = args.into_iter();
     while let Some(arg) = iter.next() {
@@ -80,10 +80,7 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, Par
                 return Err(ParseError(format!("unknown flag: {other}")));
             }
             _ => {
-                if path.is_some() {
-                    return Err(ParseError("expected exactly one file argument".to_string()));
-                }
-                path = Some(arg);
+                paths.push(arg);
             }
         }
     }
@@ -99,15 +96,16 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, Par
         None
     };
 
-    match path {
-        Some(path) => Ok(Config {
-            path,
+    if paths.is_empty() {
+        Err(ParseError("at least one file argument is required".to_string()))
+    } else {
+        Ok(Config {
+            paths,
             matcher,
             from_start,
             invert,
             since,
-        }),
-        None => Err(ParseError("a file argument is required".to_string())),
+        })
     }
 }
 
@@ -157,6 +155,17 @@ pub fn filter_available<R: BufRead, W: Write>(
     invert: bool,
     since: Option<DateTime<FixedOffset>>,
 ) -> io::Result<usize> {
+    filter_available_with_prefix(reader, out, matcher, invert, since, None)
+}
+
+pub fn filter_available_with_prefix<R: BufRead, W: Write>(
+    reader: &mut R,
+    out: &mut W,
+    matcher: Option<&Matcher>,
+    invert: bool,
+    since: Option<DateTime<FixedOffset>>,
+    prefix: Option<&str>,
+) -> io::Result<usize> {
     let mut written = 0;
     let mut line = String::new();
     loop {
@@ -167,7 +176,11 @@ pub fn filter_available<R: BufRead, W: Write>(
         }
         let trimmed = line.trim_end_matches(['\r', '\n']);
         if matches(trimmed, matcher, invert) && since.map_or(true, |s| is_after_since(trimmed, s)) {
-            writeln!(out, "{trimmed}")?;
+            if let Some(pfx) = prefix {
+                writeln!(out, "{}: {}", pfx, trimmed)?;
+            } else {
+                writeln!(out, "{trimmed}")?;
+            }
             written += 1;
         }
     }
@@ -185,7 +198,7 @@ mod tests {
     #[test]
     fn parses_file_only() {
         let config = parse(&["app.log"]).unwrap();
-        assert_eq!(config.path, "app.log");
+        assert_eq!(config.paths, vec!["app.log"]);
         assert!(config.matcher.is_none());
         assert_eq!(config.from_start, false);
         assert_eq!(config.invert, false);
@@ -194,7 +207,7 @@ mod tests {
     #[test]
     fn parses_filter_and_from_start() {
         let config = parse(&["--filter", "ERROR", "--from-start", "app.log"]).unwrap();
-        assert_eq!(config.path, "app.log");
+        assert_eq!(config.paths, vec!["app.log"]);
         assert!(config.matcher.is_some());
         assert_eq!(config.from_start, true);
         assert_eq!(config.invert, false);
@@ -216,8 +229,9 @@ mod tests {
     }
 
     #[test]
-    fn two_files_are_rejected() {
-        assert!(parse(&["a.log", "b.log"]).is_err());
+    fn multiple_files_are_accepted() {
+        let config = parse(&["a.log", "b.log"]).unwrap();
+        assert_eq!(config.paths, vec!["a.log", "b.log"]);
     }
 
     #[test]
@@ -273,7 +287,7 @@ mod tests {
     #[test]
     fn parses_invert_flag() {
         let config = parse(&["--invert", "--filter", "ERROR", "app.log"]).unwrap();
-        assert_eq!(config.path, "app.log");
+        assert_eq!(config.paths, vec!["app.log"]);
         assert!(config.matcher.is_some());
         assert_eq!(config.from_start, false);
         assert_eq!(config.invert, true);
@@ -301,7 +315,7 @@ mod tests {
     #[test]
     fn parses_regex_flag() {
         let config = parse(&["--filter", "ERR.*", "--regex", "app.log"]).unwrap();
-        assert_eq!(config.path, "app.log");
+        assert_eq!(config.paths, vec!["app.log"]);
         assert!(config.matcher.is_some());
         assert_eq!(config.from_start, false);
         assert_eq!(config.invert, false);
@@ -347,7 +361,7 @@ mod tests {
     #[test]
     fn parses_since_flag() {
         let config = parse(&["--since", "2026-07-10T14:30:00+00:00", "app.log"]).unwrap();
-        assert_eq!(config.path, "app.log");
+        assert_eq!(config.paths, vec!["app.log"]);
         assert!(config.since.is_some());
     }
 
@@ -416,5 +430,31 @@ mod tests {
         let written = filter_available(&mut reader, &mut out, None, false, Some(since_dt)).unwrap();
         assert_eq!(written, 1);
         assert_eq!(String::from_utf8(out).unwrap(), "2026-07-10T14:35:00+00:00\tafter\n");
+    }
+
+    #[test]
+    fn parse_multiple_files() {
+        let config = parse(&["file1.log", "file2.log", "file3.log"]).unwrap();
+        assert_eq!(config.paths, vec!["file1.log", "file2.log", "file3.log"]);
+    }
+
+    #[test]
+    fn filter_available_with_prefix_adds_filename() {
+        let input = "line one\nline two\n";
+        let mut reader = std::io::Cursor::new(input);
+        let mut out = Vec::new();
+        let written = filter_available_with_prefix(&mut reader, &mut out, None, false, None, Some("app.log")).unwrap();
+        assert_eq!(written, 2);
+        assert_eq!(String::from_utf8(out).unwrap(), "app.log: line one\napp.log: line two\n");
+    }
+
+    #[test]
+    fn filter_available_with_prefix_without_prefix() {
+        let input = "line one\nline two\n";
+        let mut reader = std::io::Cursor::new(input);
+        let mut out = Vec::new();
+        let written = filter_available_with_prefix(&mut reader, &mut out, None, false, None, None).unwrap();
+        assert_eq!(written, 2);
+        assert_eq!(String::from_utf8(out).unwrap(), "line one\nline two\n");
     }
 }

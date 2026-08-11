@@ -4,7 +4,7 @@ use std::process::ExitCode;
 use std::thread;
 use std::time::Duration;
 
-use logtail::{filter_available, parse_args, Config, USAGE};
+use logtail::{filter_available_with_prefix, parse_args, Config, USAGE};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
 
@@ -21,26 +21,70 @@ fn main() -> ExitCode {
     match run(&config) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-            eprintln!("logtail: {}: {err}", config.path);
+            eprintln!("logtail: {err}");
             ExitCode::FAILURE
         }
     }
 }
 
-/// Follow the configured file, printing matching lines as they arrive.
+/// Follow the configured files, printing matching lines as they arrive.
 fn run(config: &Config) -> io::Result<()> {
-    let file = File::open(&config.path)?;
-    let mut reader = BufReader::new(file);
-
-    if !config.from_start {
-        reader.seek(SeekFrom::End(0))?;
+    struct FileReader {
+        reader: BufReader<File>,
+        path: String,
     }
 
+    let mut readers: Vec<FileReader> = Vec::new();
+    for path in &config.paths {
+        match File::open(path) {
+            Ok(file) => {
+                let mut reader = BufReader::new(file);
+                if !config.from_start {
+                    if let Err(err) = reader.seek(SeekFrom::End(0)) {
+                        eprintln!("logtail: {}: {err}", path);
+                        continue;
+                    }
+                }
+                readers.push(FileReader {
+                    reader,
+                    path: path.clone(),
+                });
+            }
+            Err(err) => {
+                eprintln!("logtail: {}: {err}", path);
+            }
+        }
+    }
+
+    if readers.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "could not open any of the specified files",
+        ));
+    }
+
+    let show_prefix = readers.len() > 1;
     let stdout = io::stdout();
     loop {
         {
             let mut out = stdout.lock();
-            filter_available(&mut reader, &mut out, config.matcher.as_ref(), config.invert, config.since)?;
+            for file_reader in &mut readers {
+                let prefix = if show_prefix {
+                    Some(file_reader.path.as_str())
+                } else {
+                    None
+                };
+                if let Err(err) = filter_available_with_prefix(
+                    &mut file_reader.reader,
+                    &mut out,
+                    config.matcher.as_ref(),
+                    config.invert,
+                    config.since,
+                    prefix,
+                ) {
+                    eprintln!("logtail: {}: {}", file_reader.path, err);
+                }
+            }
             out.flush()?;
         }
         thread::sleep(POLL_INTERVAL);
