@@ -270,6 +270,7 @@ def _generate_occurrences(start_date: date, end_date: date | None, frequency: st
 
     occurrences = []
     current = start_date
+    anchor_day = start_date.day
 
     if frequency == "daily":
         while current <= up_to:
@@ -286,20 +287,12 @@ def _generate_occurrences(start_date: date, end_date: date | None, frequency: st
             if end_date is None or current <= end_date:
                 occurrences.append(current)
             if current.month == 12:
-                current = date(current.year + 1, 1, current.day)
+                next_month = date(current.year + 1, 1, 1)
             else:
-                next_month = current.month + 1
-                next_year = current.year
-                try:
-                    current = date(next_year, next_month, current.day)
-                except ValueError:
-                    day = 28
-                    while day > 0:
-                        try:
-                            current = date(next_year, next_month, day)
-                            break
-                        except ValueError:
-                            day -= 1
+                next_month = date(current.year, current.month + 1, 1)
+            last_day_of_next = (next_month.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+            target_day = min(anchor_day, last_day_of_next.day)
+            current = next_month.replace(day=target_day)
 
     return occurrences
 
@@ -314,6 +307,7 @@ def generate_due_transactions(conn: sqlite3.Connection, up_to: date) -> list[Tra
     generated = []
     with conn:
         for row in rows:
+            rule_id = row["id"]
             start_date = date.fromisoformat(row["start_date"])
             end_date = date.fromisoformat(row["end_date"]) if row["end_date"] else None
             frequency = row["frequency"]
@@ -322,8 +316,8 @@ def generate_due_transactions(conn: sqlite3.Connection, up_to: date) -> list[Tra
 
             existing_dates = set()
             existing_rows = conn.execute(
-                "SELECT DISTINCT date FROM transactions WHERE category = ? AND amount_cents = ? AND description = ?",
-                (row["category"], row["amount_cents"], row["description"]),
+                "SELECT DISTINCT date FROM transactions WHERE rule_id = ?",
+                (rule_id,),
             ).fetchall()
             for existing_row in existing_rows:
                 existing_dates.add(existing_row["date"])
@@ -332,10 +326,10 @@ def generate_due_transactions(conn: sqlite3.Connection, up_to: date) -> list[Tra
                 occurrence_iso = occurrence.isoformat()
                 if occurrence_iso not in existing_dates:
                     tx_row = conn.execute(
-                        "INSERT INTO transactions (amount_cents, category, description, date) "
-                        "VALUES (?, ?, ?, ?) "
+                        "INSERT INTO transactions (amount_cents, category, description, date, rule_id) "
+                        "VALUES (?, ?, ?, ?, ?) "
                         "RETURNING id, amount_cents, category, description, date",
-                        (row["amount_cents"], row["category"], row["description"], occurrence_iso),
+                        (row["amount_cents"], row["category"], row["description"], occurrence_iso, rule_id),
                     ).fetchone()
                     if tx_row is not None:
                         generated.append(_row_to_transaction(tx_row))
