@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import sqlite3
+from collections.abc import Iterator
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
@@ -160,7 +161,7 @@ def export_transactions(conn: sqlite3.Connection) -> str:
     return output.getvalue()
 
 
-def export_transactions_stream(conn: sqlite3.Connection) -> str:
+def export_transactions_stream(conn: sqlite3.Connection) -> Iterator[str]:
     """Stream all transactions as CSV with formula injection protection, yielding one line at a time."""
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=["amount", "category", "description", "date"])
