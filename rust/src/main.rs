@@ -21,12 +21,7 @@ fn main() -> ExitCode {
     match run(&config) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
-            if err.kind() != io::ErrorKind::NotFound {
-                let first_path = config.paths.first().map(|s| s.as_str()).unwrap_or("unknown");
-                eprintln!("logtail: {}: {err}", first_path);
-            } else {
-                eprintln!("logtail: {err}");
-            }
+            eprintln!("logtail: {err}");
             ExitCode::FAILURE
         }
     }
@@ -45,7 +40,10 @@ fn run(config: &Config) -> io::Result<()> {
             Ok(file) => {
                 let mut reader = BufReader::new(file);
                 if !config.from_start {
-                    reader.seek(SeekFrom::End(0))?;
+                    if let Err(err) = reader.seek(SeekFrom::End(0)) {
+                        eprintln!("logtail: {}: {err}", path);
+                        continue;
+                    }
                 }
                 readers.push(FileReader {
                     reader,
@@ -83,7 +81,10 @@ fn run(config: &Config) -> io::Result<()> {
                     config.invert,
                     config.since,
                     prefix,
-                )?;
+                )
+                .map_err(|err| {
+                    io::Error::new(err.kind(), format!("{}: {}", file_reader.path, err))
+                })?;
             }
             out.flush()?;
         }
