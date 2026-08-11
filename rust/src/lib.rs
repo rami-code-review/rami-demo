@@ -2,6 +2,7 @@
 
 use std::io::{self, BufRead, Write};
 use regex::Regex;
+use chrono::DateTime;
 
 #[derive(Debug)]
 pub enum Matcher {
@@ -29,6 +30,8 @@ pub struct Config {
     pub from_start: bool,
     /// Invert the filter: keep lines that do NOT match.
     pub invert: bool,
+    /// Show only lines with timestamps at or after this time; `None` keeps every line.
+    pub since: Option<String>,
 }
 
 /// An error in the command-line arguments.
@@ -44,7 +47,7 @@ impl std::fmt::Display for ParseError {
 impl std::error::Error for ParseError {}
 
 /// The usage string shown on a parse error or `--help`.
-pub const USAGE: &str = "usage: logtail [--filter <substring>] [--regex] [--invert] [--from-start] <file>";
+pub const USAGE: &str = "usage: logtail [--filter <substring>] [--regex] [--invert] [--from-start] [--since <timestamp>] <file>";
 
 /// Parse command-line arguments (excluding the program name) into a [`Config`].
 pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, ParseError> {
@@ -52,6 +55,7 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, Par
     let mut from_start = false;
     let mut invert = false;
     let mut regex_mode = false;
+    let mut since = None;
     let mut path = None;
 
     let mut iter = args.into_iter();
@@ -66,6 +70,13 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, Par
             "--from-start" => from_start = true,
             "--invert" => invert = true,
             "--regex" => regex_mode = true,
+            "--since" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| ParseError("--since requires a value".to_string()))?;
+                validate_timestamp(&value)?;
+                since = Some(value);
+            }
             other if other.starts_with("--") => {
                 return Err(ParseError(format!("unknown flag: {other}")));
             }
@@ -95,9 +106,42 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, Par
             matcher,
             from_start,
             invert,
+            since,
         }),
         None => Err(ParseError("a file argument is required".to_string())),
     }
+}
+
+fn validate_timestamp(s: &str) -> Result<(), ParseError> {
+    DateTime::parse_from_rfc3339(s)
+        .map_err(|_| ParseError(format!("invalid timestamp: {s}")))?;
+    Ok(())
+}
+
+fn extract_leading_timestamp(line: &str) -> Option<String> {
+    let mut timestamp = String::new();
+    for ch in line.chars() {
+        if ch == ' ' && !timestamp.is_empty() {
+            if DateTime::parse_from_rfc3339(&timestamp).is_ok() {
+                return Some(timestamp);
+            }
+            return None;
+        }
+        timestamp.push(ch);
+    }
+    None
+}
+
+fn is_after_since(line: &str, since: &str) -> bool {
+    if let Some(ts_str) = extract_leading_timestamp(line) {
+        if let (Ok(line_ts), Ok(since_ts)) = (
+            DateTime::parse_from_rfc3339(&ts_str),
+            DateTime::parse_from_rfc3339(since),
+        ) {
+            return line_ts >= since_ts;
+        }
+    }
+    false
 }
 
 /// Report whether a line should be printed using a compiled matcher.
@@ -117,6 +161,7 @@ pub fn filter_available<R: BufRead, W: Write>(
     out: &mut W,
     matcher: Option<&Matcher>,
     invert: bool,
+    since: Option<&str>,
 ) -> io::Result<usize> {
     let mut written = 0;
     let mut line = String::new();
@@ -127,7 +172,7 @@ pub fn filter_available<R: BufRead, W: Write>(
             break;
         }
         let trimmed = line.trim_end_matches(['\r', '\n']);
-        if matches(trimmed, matcher, invert) {
+        if matches(trimmed, matcher, invert) && since.map_or(true, |s| is_after_since(trimmed, s)) {
             writeln!(out, "{trimmed}")?;
             written += 1;
         }
@@ -195,7 +240,7 @@ mod tests {
         let mut reader = std::io::Cursor::new(input);
         let mut out = Vec::new();
         let matcher = Matcher::Substring("ERROR".to_string());
-        let written = filter_available(&mut reader, &mut out, Some(&matcher), false).unwrap();
+        let written = filter_available(&mut reader, &mut out, Some(&matcher), false, None).unwrap();
         assert_eq!(written, 2);
         assert_eq!(String::from_utf8(out).unwrap(), "ERROR boom\nERROR again\n");
     }
@@ -205,7 +250,7 @@ mod tests {
         let input = "one\ntwo\nthree\n";
         let mut reader = std::io::Cursor::new(input);
         let mut out = Vec::new();
-        let written = filter_available(&mut reader, &mut out, None, false).unwrap();
+        let written = filter_available(&mut reader, &mut out, None, false, None).unwrap();
         assert_eq!(written, 3);
         assert_eq!(String::from_utf8(out).unwrap(), "one\ntwo\nthree\n");
     }
@@ -216,7 +261,7 @@ mod tests {
         let mut reader = std::io::Cursor::new(input);
         let mut out = Vec::new();
         let matcher = Matcher::Substring("ERROR".to_string());
-        filter_available(&mut reader, &mut out, Some(&matcher), false).unwrap();
+        filter_available(&mut reader, &mut out, Some(&matcher), false, None).unwrap();
         assert_eq!(String::from_utf8(out).unwrap(), "ERROR crlf\n");
     }
 
@@ -226,7 +271,7 @@ mod tests {
         let mut reader = std::io::Cursor::new(input);
         let mut out = Vec::new();
         let matcher = Matcher::Substring("ERROR".to_string());
-        let written = filter_available(&mut reader, &mut out, Some(&matcher), false).unwrap();
+        let written = filter_available(&mut reader, &mut out, Some(&matcher), false, None).unwrap();
         assert_eq!(written, 1);
         assert_eq!(String::from_utf8(out).unwrap(), "ERROR done\n");
     }
@@ -254,7 +299,7 @@ mod tests {
         let mut reader = std::io::Cursor::new(input);
         let mut out = Vec::new();
         let matcher = Matcher::Substring("ERROR".to_string());
-        let written = filter_available(&mut reader, &mut out, Some(&matcher), true).unwrap();
+        let written = filter_available(&mut reader, &mut out, Some(&matcher), true, None).unwrap();
         assert_eq!(written, 2);
         assert_eq!(String::from_utf8(out).unwrap(), "INFO start\nINFO ok\n");
     }
@@ -289,7 +334,7 @@ mod tests {
         let mut reader = std::io::Cursor::new(input);
         let mut out = Vec::new();
         let matcher = Matcher::Regex(Regex::new("^ERROR").unwrap());
-        let written = filter_available(&mut reader, &mut out, Some(&matcher), false).unwrap();
+        let written = filter_available(&mut reader, &mut out, Some(&matcher), false, None).unwrap();
         assert_eq!(written, 2);
         assert_eq!(String::from_utf8(out).unwrap(), "ERROR: boom\nERROR: again\n");
     }
@@ -300,8 +345,57 @@ mod tests {
         let mut reader = std::io::Cursor::new(input);
         let mut out = Vec::new();
         let matcher = Matcher::Regex(Regex::new("^ERROR").unwrap());
-        let written = filter_available(&mut reader, &mut out, Some(&matcher), true).unwrap();
+        let written = filter_available(&mut reader, &mut out, Some(&matcher), true, None).unwrap();
         assert_eq!(written, 1);
         assert_eq!(String::from_utf8(out).unwrap(), "INFO: ok\n");
+    }
+
+    #[test]
+    fn parses_since_flag() {
+        let config = parse(&["--since", "2026-07-10T14:30:00+00:00", "app.log"]).unwrap();
+        assert_eq!(config.path, "app.log");
+        assert_eq!(config.since, Some("2026-07-10T14:30:00+00:00".to_string()));
+    }
+
+    #[test]
+    fn invalid_since_timestamp_is_rejected() {
+        let result = parse(&["--since", "not-a-timestamp", "app.log"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn since_flag_requires_a_value() {
+        let result = parse(&["--since"]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn filter_available_with_since_keeps_lines_after_timestamp() {
+        let input = "2026-07-10T14:30:00+00:00 INFO boot\n2026-07-10T14:35:00+00:00 ERROR boom\n2026-07-10T14:25:00+00:00 INFO skipped\n";
+        let mut reader = std::io::Cursor::new(input);
+        let mut out = Vec::new();
+        let written = filter_available(&mut reader, &mut out, None, false, Some("2026-07-10T14:30:00+00:00")).unwrap();
+        assert_eq!(written, 2);
+        assert_eq!(String::from_utf8(out).unwrap(), "2026-07-10T14:30:00+00:00 INFO boot\n2026-07-10T14:35:00+00:00 ERROR boom\n");
+    }
+
+    #[test]
+    fn filter_available_with_since_handles_short_lines() {
+        let input = "short\n2026-07-10T14:35:00+00:00 valid\n";
+        let mut reader = std::io::Cursor::new(input);
+        let mut out = Vec::new();
+        let written = filter_available(&mut reader, &mut out, None, false, Some("2026-07-10T14:30:00+00:00")).unwrap();
+        assert_eq!(written, 1);
+        assert_eq!(String::from_utf8(out).unwrap(), "2026-07-10T14:35:00+00:00 valid\n");
+    }
+
+    #[test]
+    fn filter_available_with_since_handles_multibyte_chars() {
+        let input = "2026-07-10T14:35:00+00:00 café\n🎉 no timestamp\n";
+        let mut reader = std::io::Cursor::new(input);
+        let mut out = Vec::new();
+        let written = filter_available(&mut reader, &mut out, None, false, Some("2026-07-10T14:30:00+00:00")).unwrap();
+        assert_eq!(written, 1);
+        assert_eq!(String::from_utf8(out).unwrap(), "2026-07-10T14:35:00+00:00 café\n");
     }
 }
