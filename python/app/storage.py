@@ -137,6 +137,22 @@ def monthly_summary(conn: sqlite3.Connection, month: str) -> Summary:
     return Summary(month=month, totals=totals, total=from_cents(overall))
 
 
+def export_transactions(conn: sqlite3.Connection) -> str:
+    """Export all transactions as CSV content with columns: amount, category, description, date."""
+    transactions = list_transactions(conn)
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=["amount", "category", "description", "date"])
+    writer.writeheader()
+    for tx in transactions:
+        writer.writerow({
+            "amount": str(tx.amount),
+            "category": tx.category.value,
+            "description": tx.description,
+            "date": tx.date.isoformat(),
+        })
+    return output.getvalue()
+
+
 def import_transactions(
     conn: sqlite3.Connection, csv_content: str
 ) -> list[TransactionOut]:
