@@ -40,7 +40,7 @@ fn run(config: &Config) -> io::Result<()> {
     loop {
         {
             let mut out = stdout.lock();
-            filter_available(&mut reader, &mut out, config.matcher.as_ref(), config.invert)?;
+            filter_available(&mut reader, &mut out, config.matcher.as_ref(), config.invert, config.since)?;
             out.flush()?;
         }
         thread::sleep(POLL_INTERVAL);

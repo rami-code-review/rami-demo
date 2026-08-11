@@ -23,7 +23,7 @@ fn reads_appended_lines_incrementally() {
 
     let mut out = Vec::new();
     let matcher = Matcher::Substring("ERROR".to_string());
-    let written = filter_available(&mut reader, &mut out, Some(&matcher), false).unwrap();
+    let written = filter_available(&mut reader, &mut out, Some(&matcher), false, None).unwrap();
     assert_eq!(written, 1);
     assert_eq!(String::from_utf8(out.clone()).unwrap(), "ERROR first\n");
 
@@ -33,7 +33,7 @@ fn reads_appended_lines_incrementally() {
     writer.flush().unwrap();
 
     out.clear();
-    let written = filter_available(&mut reader, &mut out, Some(&matcher), false).unwrap();
+    let written = filter_available(&mut reader, &mut out, Some(&matcher), false, None).unwrap();
     assert_eq!(written, 1);
     assert_eq!(String::from_utf8(out).unwrap(), "ERROR second\n");
 }
@@ -60,7 +60,7 @@ fn from_end_skips_existing_content() {
     writer.flush().unwrap();
 
     let mut out = Vec::new();
-    filter_available(&mut reader, &mut out, None, false).unwrap();
+    filter_available(&mut reader, &mut out, None, false, None).unwrap();
     assert_eq!(String::from_utf8(out).unwrap(), "new line\n");
 }
 
@@ -84,7 +84,7 @@ fn invert_shows_non_matching_lines() {
 
     let mut out = Vec::new();
     let matcher = Matcher::Substring("ERROR".to_string());
-    let written = filter_available(&mut reader, &mut out, Some(&matcher), true).unwrap();
+    let written = filter_available(&mut reader, &mut out, Some(&matcher), true, None).unwrap();
     assert_eq!(written, 2);
     assert_eq!(String::from_utf8(out).unwrap(), "INFO boot\nINFO ok\n");
 }
@@ -107,7 +107,7 @@ fn invert_with_no_filter_shows_none() {
     let mut reader = BufReader::new(File::open(&path).unwrap());
 
     let mut out = Vec::new();
-    let written = filter_available(&mut reader, &mut out, None, true).unwrap();
+    let written = filter_available(&mut reader, &mut out, None, true, None).unwrap();
     assert_eq!(written, 0);
     assert_eq!(String::from_utf8(out).unwrap(), "");
 }
