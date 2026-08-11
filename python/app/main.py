@@ -13,7 +13,7 @@ from fastapi.responses import StreamingResponse
 
 from . import storage
 from .db import closing_connection, init_db
-from .models import Summary, TransactionIn, TransactionOut
+from .models import RecurringRuleIn, RecurringRuleOut, Summary, TransactionIn, TransactionOut
 from .storage import RowError
 
 MONTH_PATTERN = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
@@ -124,3 +124,24 @@ def import_transactions(
         return storage.import_transactions(conn, csv_text)
     except (RowError, ValueError, KeyError, AttributeError, UnicodeDecodeError) as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+
+@app.post("/recurring-rules", response_model=RecurringRuleOut, status_code=201)
+def create_recurring_rule(
+    rule: RecurringRuleIn, conn: sqlite3.Connection = Depends(get_db)
+) -> RecurringRuleOut:
+    """Define a new recurring transaction rule."""
+    return storage.create_recurring_rule(conn, rule)
+
+
+@app.post("/recurring-rules/generate", response_model=list[TransactionOut], status_code=201)
+def generate_recurring_transactions(
+    up_to: str = Query(..., description="Generate recurring transactions up to this date, formatted YYYY-MM-DD."),
+    conn: sqlite3.Connection = Depends(get_db),
+) -> list[TransactionOut]:
+    """Generate and insert transactions from all recurring rules up to a given date."""
+    try:
+        up_to_date = date.fromisoformat(up_to)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="up_to must be formatted YYYY-MM-DD")
+    return storage.generate_due_transactions(conn, up_to_date)
