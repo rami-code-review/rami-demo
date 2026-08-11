@@ -74,17 +74,16 @@ fn run(config: &Config) -> io::Result<()> {
                 } else {
                     None
                 };
-                filter_available_with_prefix(
+                if let Err(err) = filter_available_with_prefix(
                     &mut file_reader.reader,
                     &mut out,
                     config.matcher.as_ref(),
                     config.invert,
                     config.since,
                     prefix,
-                )
-                .map_err(|err| {
-                    io::Error::new(err.kind(), format!("{}: {}", file_reader.path, err))
-                })?;
+                ) {
+                    eprintln!("logtail: {}: {}", file_reader.path, err);
+                }
             }
             out.flush()?;
         }
