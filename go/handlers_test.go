@@ -402,3 +402,76 @@ func TestShortenOmittedCodeGeneratesRandom(t *testing.T) {
 		t.Errorf("code length = %d, want %d", len(out.Code), defaultCodeLength)
 	}
 }
+
+func TestShortenInvalidCustomCodeWithSlash(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	resp := shorten(t, srv, `{"url":"https://example.com","code":"a/b"}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestShortenInvalidCustomCodeWithSpace(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	resp := shorten(t, srv, `{"url":"https://example.com","code":"a b"}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestShortenInvalidCustomCodeTooLong(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	resp := shorten(t, srv, `{"url":"https://example.com","code":"abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("status = %d, want 400", resp.StatusCode)
+	}
+}
+
+func TestShortenValidCustomCode(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	resp := shorten(t, srv, `{"url":"https://example.com","code":"validCode123"}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Errorf("status = %d, want 201", resp.StatusCode)
+	}
+	var out shortenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if out.Code != "validCode123" {
+		t.Errorf("code = %q, want validCode123", out.Code)
+	}
+}
+
+func TestShortenCustomCodeConflictAfterValidation(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	first := shorten(t, srv, `{"url":"https://example.com/one","code":"taken123"}`)
+	if first.StatusCode != http.StatusCreated {
+		t.Fatalf("first request: status = %d, want 201", first.StatusCode)
+	}
+	first.Body.Close()
+
+	second := shorten(t, srv, `{"url":"https://example.com/two","code":"taken123"}`)
+	defer second.Body.Close()
+
+	if second.StatusCode != http.StatusConflict {
+		t.Errorf("second request: status = %d, want 409", second.StatusCode)
+	}
+}

@@ -61,6 +61,20 @@ func validShortenURL(raw string) bool {
 	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }
 
+// validCustomCode reports whether a custom code is valid.
+// Valid codes contain only alphanumeric characters and are at most 32 characters long.
+func validCustomCode(code string) bool {
+	if code == "" || len(code) > 32 {
+		return false
+	}
+	for _, ch := range code {
+		if !((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) {
+			return false
+		}
+	}
+	return true
+}
+
 // clientIP extracts the client IP from the request.
 func clientIP(r *http.Request) string {
 	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
@@ -107,6 +121,10 @@ func (h *Handler) shorten(w http.ResponseWriter, r *http.Request) {
 	var link Link
 	var err error
 	if req.Code != "" {
+		if !validCustomCode(req.Code) {
+			writeError(w, http.StatusBadRequest, "code must be alphanumeric and at most 32 characters")
+			return
+		}
 		link, err = h.store.CreateWithCode(req.URL, req.Code, req.ExpiresInSeconds)
 		if err == ErrCodeTaken {
 			writeError(w, http.StatusConflict, "short code already taken")
