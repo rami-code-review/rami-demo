@@ -179,12 +179,77 @@ func TestShortenWithExpiry(t *testing.T) {
 	}
 }
 
+func TestCreateWithMaxClicks(t *testing.T) {
+	s := newTestStore()
+	link, err := s.Create("https://example.com", 0, 3)
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	if link.MaxClicks == nil {
+		t.Error("expected MaxClicks to be set")
+	}
+	if link.MaxClicks != nil && *link.MaxClicks != 3 {
+		t.Errorf("MaxClicks = %d, want 3", *link.MaxClicks)
+	}
+}
+
+func TestResolveUpToMaxClicksRetires(t *testing.T) {
+	s := newTestStore()
+	link, _ := s.Create("https://example.com", 0, 2)
+
+	url1, ok1 := s.Resolve(link.Code)
+	if !ok1 {
+		t.Fatalf("first Resolve failed")
+	}
+	if url1 != "https://example.com" {
+		t.Errorf("first resolve got url %q", url1)
+	}
+
+	url2, ok2 := s.Resolve(link.Code)
+	if !ok2 {
+		t.Fatalf("second Resolve failed")
+	}
+	if url2 != "https://example.com" {
+		t.Errorf("second resolve got url %q", url2)
+	}
+
+	_, ok3 := s.Resolve(link.Code)
+	if ok3 {
+		t.Error("third Resolve should have failed after hitting max_clicks")
+	}
+
+	_, ok := s.Stats(link.Code)
+	if ok {
+		t.Error("expected Stats to report link not found after retirement")
+	}
+}
+
+func TestResolveWithoutMaxClicks(t *testing.T) {
+	s := newTestStore()
+	link, _ := s.Create("https://example.com", 0, 0)
+
+	for i := 0; i < 10; i++ {
+		_, ok := s.Resolve(link.Code)
+		if !ok {
+			t.Fatalf("Resolve %d failed", i+1)
+		}
+	}
+
+	stats, ok := s.Stats(link.Code)
+	if !ok {
+		t.Fatal("expected Stats to find link")
+	}
+	if stats.Clicks != 10 {
+		t.Errorf("clicks = %d, want 10", stats.Clicks)
+	}
+}
+
 func TestResolveExpiredLinkReturns404(t *testing.T) {
 	s := &Store{links: make(map[string]*Link)}
 	baseTime := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 	s.now = func() time.Time { return baseTime }
 
-	link, _ := s.Create("https://example.com", 3600)
+	link, _ := s.Create("https://example.com", 3600, 0)
 
 	s.now = func() time.Time {
 		return time.Date(2026, 6, 1, 13, 1, 0, 0, time.UTC)
@@ -474,4 +539,38 @@ func TestShortenCustomCodeConflictAfterValidation(t *testing.T) {
 	if second.StatusCode != http.StatusConflict {
 		t.Errorf("second request: status = %d, want 409", second.StatusCode)
 	}
+}
+
+func TestShortenWithMaxClicksViaAPI(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+	client := noRedirectClient()
+
+	resp := shorten(t, srv, `{"url":"https://example.com/dest","max_clicks":2}`)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("shorten: status = %d, want 201", resp.StatusCode)
+	}
+	var out shortenResponse
+	_ = json.NewDecoder(resp.Body).Decode(&out)
+	resp.Body.Close()
+
+	for i := 1; i <= 2; i++ {
+		resolveResp, err := client.Get(srv.URL + "/" + out.Code)
+		if err != nil {
+			t.Fatalf("resolve %d: %v", i, err)
+		}
+		if resolveResp.StatusCode != http.StatusFound {
+			t.Errorf("resolve %d: status = %d, want 302", i, resolveResp.StatusCode)
+		}
+		resolveResp.Body.Close()
+	}
+
+	resolveResp, err := client.Get(srv.URL + "/" + out.Code)
+	if err != nil {
+		t.Fatalf("third resolve: %v", err)
+	}
+	if resolveResp.StatusCode != http.StatusNotFound {
+		t.Errorf("third resolve: status = %d, want 404", resolveResp.StatusCode)
+	}
+	resolveResp.Body.Close()
 }

@@ -15,11 +15,11 @@ func newTestStore() *Store {
 func TestCreateAssignsUniqueCodeAndZeroClicks(t *testing.T) {
 	s := newTestStore()
 
-	a, err := s.Create("https://example.com/one", 0)
+	a, err := s.Create("https://example.com/one", 0, 0)
 	if err != nil {
 		t.Fatalf("Create returned error: %v", err)
 	}
-	b, err := s.Create("https://example.com/two", 0)
+	b, err := s.Create("https://example.com/two", 0, 0)
 	if err != nil {
 		t.Fatalf("Create returned error: %v", err)
 	}
@@ -37,7 +37,7 @@ func TestCreateAssignsUniqueCodeAndZeroClicks(t *testing.T) {
 
 func TestResolveIncrementsClicks(t *testing.T) {
 	s := newTestStore()
-	link, _ := s.Create("https://example.com", 0)
+	link, _ := s.Create("https://example.com", 0, 0)
 
 	for i := 1; i <= 3; i++ {
 		url, ok := s.Resolve(link.Code)
@@ -57,7 +57,7 @@ func TestResolveIncrementsClicks(t *testing.T) {
 
 func TestStatsDoesNotIncrementClicks(t *testing.T) {
 	s := newTestStore()
-	link, _ := s.Create("https://example.com", 0)
+	link, _ := s.Create("https://example.com", 0, 0)
 
 	s.Stats(link.Code)
 	s.Stats(link.Code)
@@ -77,7 +77,7 @@ func TestResolveUnknownCode(t *testing.T) {
 
 func TestCreateWithExpiry(t *testing.T) {
 	s := newTestStore()
-	link, err := s.Create("https://example.com", 3600)
+	link, err := s.Create("https://example.com", 3600, 0)
 	if err != nil {
 		t.Fatalf("Create returned error: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestCreateWithExpiry(t *testing.T) {
 
 func TestResolveBeforeExpiry(t *testing.T) {
 	s := newTestStore()
-	link, _ := s.Create("https://example.com", 3600)
+	link, _ := s.Create("https://example.com", 3600, 0)
 
 	url, ok := s.Resolve(link.Code)
 	if !ok {
@@ -101,7 +101,7 @@ func TestResolveBeforeExpiry(t *testing.T) {
 
 func TestResolveAfterExpiry(t *testing.T) {
 	s := newTestStore()
-	link, _ := s.Create("https://example.com", 3600)
+	link, _ := s.Create("https://example.com", 3600, 0)
 
 	s.now = func() time.Time {
 		return time.Date(2026, 6, 1, 13, 1, 0, 0, time.UTC)
