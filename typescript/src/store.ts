@@ -1,17 +1,20 @@
 import { randomUUID } from "node:crypto";
-import type { Task, TaskStatus } from "./task.js";
+import type { Task, TaskStatus, Recurrence } from "./task.js";
+import { getNextDueDate } from "./task.js";
 
 /** An in-memory store of tasks. Swap this out for a database to add persistence. */
 export class TaskStore {
   private tasks = new Map<string, Task>();
 
-  create(title: string, tags?: string[]): Task {
+  create(title: string, tags?: string[], recurrence?: Recurrence, dueDate?: string): Task {
     const task: Task = {
       id: randomUUID(),
       title,
       done: false,
       createdAt: new Date().toISOString(),
       tags: tags && tags.length > 0 ? tags : undefined,
+      recurrence,
+      dueDate,
     };
     this.tasks.set(task.id, task);
     return task;
@@ -48,6 +51,21 @@ export class TaskStore {
       tags: changes.tags !== undefined ? (changes.tags.length > 0 ? changes.tags : undefined) : existing.tags,
     };
     this.tasks.set(id, updated);
+
+    if (changes.done === true && existing.recurrence && existing.dueDate) {
+      const nextDueDate = getNextDueDate(existing.dueDate, existing.recurrence);
+      const nextTask: Task = {
+        id: randomUUID(),
+        title: existing.title,
+        done: false,
+        createdAt: new Date().toISOString(),
+        tags: existing.tags,
+        recurrence: existing.recurrence,
+        dueDate: nextDueDate,
+      };
+      this.tasks.set(nextTask.id, nextTask);
+    }
+
     return updated;
   }
 
@@ -73,6 +91,21 @@ export class TaskStore {
         } else {
           const updated: Task = { ...existing, done: true };
           this.tasks.set(id, updated);
+
+          if (existing.recurrence && existing.dueDate) {
+            const nextDueDate = getNextDueDate(existing.dueDate, existing.recurrence);
+            const nextTask: Task = {
+              id: randomUUID(),
+              title: existing.title,
+              done: false,
+              createdAt: new Date().toISOString(),
+              tags: existing.tags,
+              recurrence: existing.recurrence,
+              dueDate: nextDueDate,
+            };
+            this.tasks.set(nextTask.id, nextTask);
+          }
+
           succeeded++;
         }
       } else if (action === "delete") {
