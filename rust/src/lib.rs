@@ -2,7 +2,7 @@
 
 use std::io::{self, BufRead, Write};
 use regex::Regex;
-use chrono::DateTime;
+use chrono::{DateTime, FixedOffset};
 
 #[derive(Debug)]
 pub enum Matcher {
@@ -31,7 +31,7 @@ pub struct Config {
     /// Invert the filter: keep lines that do NOT match.
     pub invert: bool,
     /// Show only lines with timestamps at or after this time; `None` keeps every line.
-    pub since: Option<String>,
+    pub since: Option<DateTime<FixedOffset>>,
 }
 
 /// An error in the command-line arguments.
@@ -74,8 +74,7 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, Par
                 let value = iter
                     .next()
                     .ok_or_else(|| ParseError("--since requires a value".to_string()))?;
-                validate_timestamp(&value)?;
-                since = Some(value);
+                since = Some(validate_timestamp(&value)?);
             }
             other if other.starts_with("--") => {
                 return Err(ParseError(format!("unknown flag: {other}")));
@@ -112,10 +111,9 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, Par
     }
 }
 
-fn validate_timestamp(s: &str) -> Result<(), ParseError> {
+fn validate_timestamp(s: &str) -> Result<DateTime<FixedOffset>, ParseError> {
     DateTime::parse_from_rfc3339(s)
-        .map_err(|_| ParseError(format!("invalid timestamp: {s}")))?;
-    Ok(())
+        .map_err(|_| ParseError(format!("invalid timestamp: {s}")))
 }
 
 fn extract_leading_timestamp(line: &str) -> Option<String> {
@@ -135,13 +133,10 @@ fn extract_leading_timestamp(line: &str) -> Option<String> {
     None
 }
 
-fn is_after_since(line: &str, since: &str) -> bool {
+fn is_after_since(line: &str, since: DateTime<FixedOffset>) -> bool {
     if let Some(ts_str) = extract_leading_timestamp(line) {
-        if let (Ok(line_ts), Ok(since_ts)) = (
-            DateTime::parse_from_rfc3339(&ts_str),
-            DateTime::parse_from_rfc3339(since),
-        ) {
-            return line_ts >= since_ts;
+        if let Ok(line_ts) = DateTime::parse_from_rfc3339(&ts_str) {
+            return line_ts >= since;
         }
     }
     false
@@ -155,16 +150,12 @@ pub fn matches(line: &str, matcher: Option<&Matcher>, invert: bool) -> bool {
     }
 }
 
-/// Read all currently available lines from `reader` and write the matching ones to `out`.
-///
-/// Returns the number of lines written. Stops at EOF; callers tailing a growing
-/// file invoke this repeatedly as new lines arrive.
 pub fn filter_available<R: BufRead, W: Write>(
     reader: &mut R,
     out: &mut W,
     matcher: Option<&Matcher>,
     invert: bool,
-    since: Option<&str>,
+    since: Option<DateTime<FixedOffset>>,
 ) -> io::Result<usize> {
     let mut written = 0;
     let mut line = String::new();
@@ -357,7 +348,7 @@ mod tests {
     fn parses_since_flag() {
         let config = parse(&["--since", "2026-07-10T14:30:00+00:00", "app.log"]).unwrap();
         assert_eq!(config.path, "app.log");
-        assert_eq!(config.since, Some("2026-07-10T14:30:00+00:00".to_string()));
+        assert!(config.since.is_some());
     }
 
     #[test]
@@ -377,7 +368,8 @@ mod tests {
         let input = "2026-07-10T14:30:00+00:00 INFO boot\n2026-07-10T14:35:00+00:00 ERROR boom\n2026-07-10T14:25:00+00:00 INFO skipped\n";
         let mut reader = std::io::Cursor::new(input);
         let mut out = Vec::new();
-        let written = filter_available(&mut reader, &mut out, None, false, Some("2026-07-10T14:30:00+00:00")).unwrap();
+        let since_dt = DateTime::parse_from_rfc3339("2026-07-10T14:30:00+00:00").unwrap();
+        let written = filter_available(&mut reader, &mut out, None, false, Some(since_dt)).unwrap();
         assert_eq!(written, 2);
         assert_eq!(String::from_utf8(out).unwrap(), "2026-07-10T14:30:00+00:00 INFO boot\n2026-07-10T14:35:00+00:00 ERROR boom\n");
     }
@@ -387,7 +379,8 @@ mod tests {
         let input = "short\n2026-07-10T14:35:00+00:00 valid\n";
         let mut reader = std::io::Cursor::new(input);
         let mut out = Vec::new();
-        let written = filter_available(&mut reader, &mut out, None, false, Some("2026-07-10T14:30:00+00:00")).unwrap();
+        let since_dt = DateTime::parse_from_rfc3339("2026-07-10T14:30:00+00:00").unwrap();
+        let written = filter_available(&mut reader, &mut out, None, false, Some(since_dt)).unwrap();
         assert_eq!(written, 1);
         assert_eq!(String::from_utf8(out).unwrap(), "2026-07-10T14:35:00+00:00 valid\n");
     }
@@ -397,7 +390,8 @@ mod tests {
         let input = "2026-07-10T14:35:00+00:00 café\n🎉 no timestamp\n";
         let mut reader = std::io::Cursor::new(input);
         let mut out = Vec::new();
-        let written = filter_available(&mut reader, &mut out, None, false, Some("2026-07-10T14:30:00+00:00")).unwrap();
+        let since_dt = DateTime::parse_from_rfc3339("2026-07-10T14:30:00+00:00").unwrap();
+        let written = filter_available(&mut reader, &mut out, None, false, Some(since_dt)).unwrap();
         assert_eq!(written, 1);
         assert_eq!(String::from_utf8(out).unwrap(), "2026-07-10T14:35:00+00:00 café\n");
     }
@@ -407,7 +401,8 @@ mod tests {
         let input = "2026-07-10T14:35:00+00:00\n2026-07-10T14:25:00+00:00\n";
         let mut reader = std::io::Cursor::new(input);
         let mut out = Vec::new();
-        let written = filter_available(&mut reader, &mut out, None, false, Some("2026-07-10T14:30:00+00:00")).unwrap();
+        let since_dt = DateTime::parse_from_rfc3339("2026-07-10T14:30:00+00:00").unwrap();
+        let written = filter_available(&mut reader, &mut out, None, false, Some(since_dt)).unwrap();
         assert_eq!(written, 1);
         assert_eq!(String::from_utf8(out).unwrap(), "2026-07-10T14:35:00+00:00\n");
     }
