@@ -132,6 +132,11 @@ export function createApp(store: TaskStore = new TaskStore()): Express {
       return res.status(400).json({ error: "each id must be a string" });
     }
 
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length !== ids.length) {
+      return res.status(400).json({ error: "ids must not contain duplicates" });
+    }
+
     if (!store.reorder(ids)) {
       return res.status(400).json({ error: "one or more task ids not found" });
     }

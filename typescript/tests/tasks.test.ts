@@ -437,6 +437,36 @@ describe("POST /tasks/reorder", () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toContain("one or more task ids not found");
   });
+
+  it("rejects duplicate ids", async () => {
+    const api = app();
+    const t1 = await request(api).post("/tasks").send({ title: "task1" });
+
+    const res = await request(api).post("/tasks/reorder").send({
+      ids: [t1.body.id, t1.body.id],
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("ids must not contain duplicates");
+  });
+
+  it("handles partial reorder without collision", async () => {
+    const api = app();
+    const t1 = await request(api).post("/tasks").send({ title: "A" });
+    const t2 = await request(api).post("/tasks").send({ title: "B" });
+    const t3 = await request(api).post("/tasks").send({ title: "C" });
+    const t4 = await request(api).post("/tasks").send({ title: "D" });
+    const t5 = await request(api).post("/tasks").send({ title: "E" });
+
+    const res = await request(api).post("/tasks/reorder").send({
+      ids: [t5.body.id, t4.body.id],
+    });
+
+    expect(res.status).toBe(200);
+
+    const list = await request(api).get("/tasks");
+    expect(list.body.map((t: { title: string }) => t.title)).toEqual(["E", "D", "A", "B", "C"]);
+  });
 });
 
 describe("Recurring tasks", () => {
@@ -645,5 +675,20 @@ describe("Recurring tasks", () => {
     const countAfterSecond = (await request(api).get("/tasks")).body.length;
 
     expect(countAfterSecond).toBe(countAfterFirst);
+  });
+
+  it("spawned recurring task appends to end with correct order", async () => {
+    const api = app();
+    const t1 = await request(api).post("/tasks").send({ title: "A" });
+    const t2 = await request(api).post("/tasks").send({ title: "B" });
+    const recurring = await request(api)
+      .post("/tasks")
+      .send({ title: "Recurring", recurrence: "daily", dueDate: "2025-01-15" });
+
+    await request(api).patch(`/tasks/${recurring.body.id}`).send({ done: true });
+
+    const list = await request(api).get("/tasks");
+    const titles = list.body.map((t: { title: string }) => t.title);
+    expect(titles).toEqual(["A", "B", "Recurring", "Recurring"]);
   });
 });

@@ -64,6 +64,7 @@ export class TaskStore {
         tags: existing.tags,
         recurrence: existing.recurrence,
         dueDate: nextDueDate,
+        order: this.nextOrder++,
       };
       this.tasks.set(nextTask.id, nextTask);
     }
@@ -125,18 +126,32 @@ export class TaskStore {
   }
 
   reorder(ids: string[]): boolean {
-    for (const id of ids) {
+    const uniqueIds = [...new Set(ids)];
+
+    if (uniqueIds.length !== ids.length) {
+      return false;
+    }
+
+    for (const id of uniqueIds) {
       if (!this.tasks.has(id)) {
         return false;
       }
     }
 
-    for (let i = 0; i < ids.length; i++) {
-      const id = ids[i]!;
-      const task = this.tasks.get(id);
-      if (task) {
-        this.tasks.set(id, { ...task, order: i });
-      }
+    const reorderedIds = new Set(uniqueIds);
+    const remaining = [...this.tasks.values()]
+      .filter((t) => !reorderedIds.has(t.id))
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+    for (let i = 0; i < uniqueIds.length; i++) {
+      const id = uniqueIds[i]!;
+      const task = this.tasks.get(id)!;
+      this.tasks.set(id, { ...task, order: i });
+    }
+
+    for (let i = 0; i < remaining.length; i++) {
+      const task = remaining[i]!;
+      this.tasks.set(task.id, { ...task, order: uniqueIds.length + i });
     }
 
     return true;
