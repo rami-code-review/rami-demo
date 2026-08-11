@@ -52,7 +52,7 @@ export class TaskStore {
     };
     this.tasks.set(id, updated);
 
-    if (changes.done === true && existing.recurrence && existing.dueDate) {
+    if (existing.done === false && changes.done === true && existing.recurrence && existing.dueDate) {
       const nextDueDate = getNextDueDate(existing.dueDate, existing.recurrence);
       const nextTask: Task = {
         id: randomUUID(),
@@ -92,7 +92,7 @@ export class TaskStore {
           const updated: Task = { ...existing, done: true };
           this.tasks.set(id, updated);
 
-          if (existing.recurrence && existing.dueDate) {
+          if (existing.done === false && existing.recurrence && existing.dueDate) {
             const nextDueDate = getNextDueDate(existing.dueDate, existing.recurrence);
             const nextTask: Task = {
               id: randomUUID(),

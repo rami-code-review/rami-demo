@@ -76,11 +76,16 @@ export function normalizeDueDate(raw: unknown): string | undefined {
   if (typeof raw !== "string") {
     throw new ValidationError("dueDate must be a string");
   }
-  const date = new Date(raw);
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    throw new ValidationError("dueDate must not be empty");
+  }
+  const dateOnly = trimmed.split("T")[0];
+  const date = new Date(dateOnly + "T00:00:00Z");
   if (isNaN(date.getTime())) {
     throw new ValidationError("dueDate must be a valid ISO date");
   }
-  return date.toISOString().split("T")[0];
+  return dateOnly;
 }
 
 /** Calculate the next due date by advancing by the recurrence interval. */
@@ -92,7 +97,13 @@ export function getNextDueDate(dueDate: string, recurrence: Recurrence): string 
   } else if (recurrence === "weekly") {
     date.setUTCDate(date.getUTCDate() + 7);
   } else if (recurrence === "monthly") {
+    const originalDay = date.getUTCDate();
+    date.setUTCDate(1);
     date.setUTCMonth(date.getUTCMonth() + 1);
+    const nextMonthStart = new Date(date);
+    nextMonthStart.setUTCMonth(nextMonthStart.getUTCMonth() + 1);
+    const lastDay = new Date(nextMonthStart.getTime() - 86400000).getUTCDate();
+    date.setUTCDate(Math.min(originalDay, lastDay));
   }
 
   const result = date.toISOString().split("T")[0];

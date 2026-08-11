@@ -515,4 +515,86 @@ describe("Recurring tasks", () => {
     expect(nextTask.recurrence).toBe("daily");
     expect(nextTask.dueDate).toBe("2025-01-16");
   });
+
+  it("handles monthly overflow: Jan 31 -> Feb 28", async () => {
+    const api = app();
+    const created = await request(api)
+      .post("/tasks")
+      .send({ title: "Monthly task", recurrence: "monthly", dueDate: "2025-01-31" });
+    const taskId = created.body.id;
+
+    await request(api).patch(`/tasks/${taskId}`).send({ done: true });
+
+    const allTasks = await request(api).get("/tasks");
+    const nextTask = allTasks.body.find((t: { id: string }) => t.id !== taskId);
+    expect(nextTask.dueDate).toBe("2025-02-28");
+  });
+
+  it("handles monthly overflow in leap year: Jan 31 -> Feb 29", async () => {
+    const api = app();
+    const created = await request(api)
+      .post("/tasks")
+      .send({ title: "Monthly task", recurrence: "monthly", dueDate: "2024-01-31" });
+    const taskId = created.body.id;
+
+    await request(api).patch(`/tasks/${taskId}`).send({ done: true });
+
+    const allTasks = await request(api).get("/tasks");
+    const nextTask = allTasks.body.find((t: { id: string }) => t.id !== taskId);
+    expect(nextTask.dueDate).toBe("2024-02-29");
+  });
+
+  it("does not spawn on re-completion of already-done recurring task", async () => {
+    const api = app();
+    const created = await request(api)
+      .post("/tasks")
+      .send({ title: "Recurring task", recurrence: "daily", dueDate: "2025-01-15" });
+    const taskId = created.body.id;
+
+    await request(api).patch(`/tasks/${taskId}`).send({ done: true });
+    const countAfterFirst = (await request(api).get("/tasks")).body.length;
+
+    await request(api).patch(`/tasks/${taskId}`).send({ done: true });
+    const countAfterSecond = (await request(api).get("/tasks")).body.length;
+
+    expect(countAfterSecond).toBe(countAfterFirst);
+  });
+
+  it("does not spawn when PATCH done:true on already-done task with title change", async () => {
+    const api = app();
+    const created = await request(api)
+      .post("/tasks")
+      .send({ title: "Recurring task", recurrence: "daily", dueDate: "2025-01-15" });
+    const taskId = created.body.id;
+
+    await request(api).patch(`/tasks/${taskId}`).send({ done: true });
+    const countAfterFirst = (await request(api).get("/tasks")).body.length;
+
+    await request(api).patch(`/tasks/${taskId}`).send({ title: "Updated title", done: true });
+    const countAfterSecond = (await request(api).get("/tasks")).body.length;
+
+    expect(countAfterSecond).toBe(countAfterFirst);
+  });
+
+  it("does not spawn on bulk re-complete of already-done recurring task", async () => {
+    const api = app();
+    const created = await request(api)
+      .post("/tasks")
+      .send({ title: "Recurring task", recurrence: "daily", dueDate: "2025-01-15" });
+    const taskId = created.body.id;
+
+    await request(api).post("/tasks/bulk/action").send({
+      ids: [taskId],
+      action: "complete",
+    });
+    const countAfterFirst = (await request(api).get("/tasks")).body.length;
+
+    await request(api).post("/tasks/bulk/action").send({
+      ids: [taskId],
+      action: "complete",
+    });
+    const countAfterSecond = (await request(api).get("/tasks")).body.length;
+
+    expect(countAfterSecond).toBe(countAfterFirst);
+  });
 });
