@@ -1,6 +1,6 @@
 import express, { type Express, type Request, type Response } from "express";
 import { TaskStore } from "./store.js";
-import { isTaskStatus, normalizeTitle, normalizeTags, ValidationError } from "./task.js";
+import { isTaskStatus, normalizeTitle, normalizeTags, normalizeRecurrence, normalizeDueDate, ValidationError } from "./task.js";
 
 /** Build the task-manager Express app around a task store. */
 export function createApp(store: TaskStore = new TaskStore()): Express {
@@ -10,16 +10,20 @@ export function createApp(store: TaskStore = new TaskStore()): Express {
   app.post("/tasks", (req: Request, res: Response) => {
     let title: string;
     let tags: string[] = [];
+    let recurrence;
+    let dueDate;
     try {
       title = normalizeTitle(req.body?.title);
       tags = normalizeTags(req.body?.tags);
+      recurrence = normalizeRecurrence(req.body?.recurrence);
+      dueDate = normalizeDueDate(req.body?.dueDate);
     } catch (err) {
       if (err instanceof ValidationError) {
         return res.status(400).json({ error: err.message });
       }
       throw err;
     }
-    return res.status(201).json(store.create(title, tags));
+    return res.status(201).json(store.create(title, tags, recurrence, dueDate));
   });
 
   app.get("/tasks", (req: Request, res: Response) => {

@@ -389,3 +389,212 @@ describe("TaskStore.list", () => {
     expect(store.list("done").map((t) => t.id)).toEqual([done.id]);
   });
 });
+
+describe("Recurring tasks", () => {
+  it("creates a task with recurrence and dueDate", async () => {
+    const res = await request(app())
+      .post("/tasks")
+      .send({ title: "Daily standup", recurrence: "daily", dueDate: "2025-01-15" });
+    expect(res.status).toBe(201);
+    expect(res.body.recurrence).toBe("daily");
+    expect(res.body.dueDate).toBe("2025-01-15");
+  });
+
+  it("spawns next occurrence when completing a recurring task", async () => {
+    const api = app();
+    const created = await request(api)
+      .post("/tasks")
+      .send({ title: "Daily standup", recurrence: "daily", dueDate: "2025-01-15" });
+    const taskId = created.body.id;
+
+    await request(api).patch(`/tasks/${taskId}`).send({ done: true });
+
+    const allTasks = await request(api).get("/tasks");
+    expect(allTasks.body.length).toBe(2);
+
+    const completedTask = allTasks.body.find((t: { id: string }) => t.id === taskId);
+    expect(completedTask.done).toBe(true);
+
+    const nextTask = allTasks.body.find((t: { id: string }) => t.id !== taskId);
+    expect(nextTask.title).toBe("Daily standup");
+    expect(nextTask.done).toBe(false);
+    expect(nextTask.recurrence).toBe("daily");
+    expect(nextTask.dueDate).toBe("2025-01-16");
+  });
+
+  it("advances weekly recurrence correctly", async () => {
+    const api = app();
+    const created = await request(api)
+      .post("/tasks")
+      .send({ title: "Weekly review", recurrence: "weekly", dueDate: "2025-01-15" });
+    const taskId = created.body.id;
+
+    await request(api).patch(`/tasks/${taskId}`).send({ done: true });
+
+    const allTasks = await request(api).get("/tasks");
+    const nextTask = allTasks.body.find((t: { id: string }) => t.id !== taskId);
+    expect(nextTask.dueDate).toBe("2025-01-22");
+  });
+
+  it("advances monthly recurrence correctly", async () => {
+    const api = app();
+    const created = await request(api)
+      .post("/tasks")
+      .send({ title: "Monthly review", recurrence: "monthly", dueDate: "2025-01-15" });
+    const taskId = created.body.id;
+
+    await request(api).patch(`/tasks/${taskId}`).send({ done: true });
+
+    const allTasks = await request(api).get("/tasks");
+    const nextTask = allTasks.body.find((t: { id: string }) => t.id !== taskId);
+    expect(nextTask.dueDate).toBe("2025-02-15");
+  });
+
+  it("does not spawn next occurrence for non-recurring tasks", async () => {
+    const api = app();
+    const created = await request(api)
+      .post("/tasks")
+      .send({ title: "One-time task" });
+    const taskId = created.body.id;
+
+    await request(api).patch(`/tasks/${taskId}`).send({ done: true });
+
+    const allTasks = await request(api).get("/tasks");
+    expect(allTasks.body.length).toBe(1);
+    expect(allTasks.body[0].done).toBe(true);
+  });
+
+  it("does not spawn next occurrence if task has recurrence but no dueDate", async () => {
+    const api = app();
+    const created = await request(api)
+      .post("/tasks")
+      .send({ title: "Incomplete recurring", recurrence: "daily" });
+    const taskId = created.body.id;
+
+    await request(api).patch(`/tasks/${taskId}`).send({ done: true });
+
+    const allTasks = await request(api).get("/tasks");
+    expect(allTasks.body.length).toBe(1);
+    expect(allTasks.body[0].done).toBe(true);
+  });
+
+  it("rejects invalid recurrence value", async () => {
+    const res = await request(app())
+      .post("/tasks")
+      .send({ title: "Task", recurrence: "invalid" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("recurrence must be one of");
+  });
+
+  it("rejects invalid dueDate", async () => {
+    const res = await request(app())
+      .post("/tasks")
+      .send({ title: "Task", dueDate: "not-a-date" });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain("dueDate must be a valid ISO date");
+  });
+
+  it("spawns next occurrence in bulk complete action", async () => {
+    const api = app();
+    const t1 = await request(api)
+      .post("/tasks")
+      .send({ title: "Recurring task", recurrence: "daily", dueDate: "2025-01-15" });
+
+    const res = await request(api).post("/tasks/bulk/action").send({
+      ids: [t1.body.id],
+      action: "complete",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.succeeded).toBe(1);
+
+    const allTasks = await request(api).get("/tasks");
+    expect(allTasks.body.length).toBe(2);
+
+    const nextTask = allTasks.body.find((t: { id: string }) => t.id !== t1.body.id);
+    expect(nextTask.recurrence).toBe("daily");
+    expect(nextTask.dueDate).toBe("2025-01-16");
+  });
+
+  it("handles monthly overflow: Jan 31 -> Feb 28", async () => {
+    const api = app();
+    const created = await request(api)
+      .post("/tasks")
+      .send({ title: "Monthly task", recurrence: "monthly", dueDate: "2025-01-31" });
+    const taskId = created.body.id;
+
+    await request(api).patch(`/tasks/${taskId}`).send({ done: true });
+
+    const allTasks = await request(api).get("/tasks");
+    const nextTask = allTasks.body.find((t: { id: string }) => t.id !== taskId);
+    expect(nextTask.dueDate).toBe("2025-02-28");
+  });
+
+  it("handles monthly overflow in leap year: Jan 31 -> Feb 29", async () => {
+    const api = app();
+    const created = await request(api)
+      .post("/tasks")
+      .send({ title: "Monthly task", recurrence: "monthly", dueDate: "2024-01-31" });
+    const taskId = created.body.id;
+
+    await request(api).patch(`/tasks/${taskId}`).send({ done: true });
+
+    const allTasks = await request(api).get("/tasks");
+    const nextTask = allTasks.body.find((t: { id: string }) => t.id !== taskId);
+    expect(nextTask.dueDate).toBe("2024-02-29");
+  });
+
+  it("does not spawn on re-completion of already-done recurring task", async () => {
+    const api = app();
+    const created = await request(api)
+      .post("/tasks")
+      .send({ title: "Recurring task", recurrence: "daily", dueDate: "2025-01-15" });
+    const taskId = created.body.id;
+
+    await request(api).patch(`/tasks/${taskId}`).send({ done: true });
+    const countAfterFirst = (await request(api).get("/tasks")).body.length;
+
+    await request(api).patch(`/tasks/${taskId}`).send({ done: true });
+    const countAfterSecond = (await request(api).get("/tasks")).body.length;
+
+    expect(countAfterSecond).toBe(countAfterFirst);
+  });
+
+  it("does not spawn when PATCH done:true on already-done task with title change", async () => {
+    const api = app();
+    const created = await request(api)
+      .post("/tasks")
+      .send({ title: "Recurring task", recurrence: "daily", dueDate: "2025-01-15" });
+    const taskId = created.body.id;
+
+    await request(api).patch(`/tasks/${taskId}`).send({ done: true });
+    const countAfterFirst = (await request(api).get("/tasks")).body.length;
+
+    await request(api).patch(`/tasks/${taskId}`).send({ title: "Updated title", done: true });
+    const countAfterSecond = (await request(api).get("/tasks")).body.length;
+
+    expect(countAfterSecond).toBe(countAfterFirst);
+  });
+
+  it("does not spawn on bulk re-complete of already-done recurring task", async () => {
+    const api = app();
+    const created = await request(api)
+      .post("/tasks")
+      .send({ title: "Recurring task", recurrence: "daily", dueDate: "2025-01-15" });
+    const taskId = created.body.id;
+
+    await request(api).post("/tasks/bulk/action").send({
+      ids: [taskId],
+      action: "complete",
+    });
+    const countAfterFirst = (await request(api).get("/tasks")).body.length;
+
+    await request(api).post("/tasks/bulk/action").send({
+      ids: [taskId],
+      action: "complete",
+    });
+    const countAfterSecond = (await request(api).get("/tasks")).body.length;
+
+    expect(countAfterSecond).toBe(countAfterFirst);
+  });
+});

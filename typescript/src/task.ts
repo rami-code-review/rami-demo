@@ -1,9 +1,13 @@
+export type Recurrence = "daily" | "weekly" | "monthly";
+
 export interface Task {
   id: string;
   title: string;
   done: boolean;
   createdAt: string;
   tags?: string[];
+  recurrence?: Recurrence;
+  dueDate?: string;
 }
 
 export type TaskStatus = "all" | "active" | "done";
@@ -48,4 +52,60 @@ export function normalizeTags(raw: unknown): string[] {
     }
   }
   return Array.from(normalized);
+}
+
+/** Validate and normalize recurrence, or throw ValidationError. */
+export function normalizeRecurrence(raw: unknown): Recurrence | undefined {
+  if (raw === undefined || raw === null) {
+    return undefined;
+  }
+  if (typeof raw !== "string") {
+    throw new ValidationError("recurrence must be a string");
+  }
+  if (raw !== "daily" && raw !== "weekly" && raw !== "monthly") {
+    throw new ValidationError("recurrence must be one of: daily, weekly, monthly");
+  }
+  return raw;
+}
+
+/** Validate and normalize a due date, or throw ValidationError. */
+export function normalizeDueDate(raw: unknown): string | undefined {
+  if (raw === undefined || raw === null) {
+    return undefined;
+  }
+  if (typeof raw !== "string") {
+    throw new ValidationError("dueDate must be a string");
+  }
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) {
+    throw new ValidationError("dueDate must not be empty");
+  }
+  const dateOnly = trimmed.split("T")[0];
+  const date = new Date(dateOnly + "T00:00:00Z");
+  if (isNaN(date.getTime())) {
+    throw new ValidationError("dueDate must be a valid ISO date");
+  }
+  return dateOnly;
+}
+
+/** Calculate the next due date by advancing by the recurrence interval. */
+export function getNextDueDate(dueDate: string, recurrence: Recurrence): string {
+  const date = new Date(dueDate + "T00:00:00Z");
+
+  if (recurrence === "daily") {
+    date.setUTCDate(date.getUTCDate() + 1);
+  } else if (recurrence === "weekly") {
+    date.setUTCDate(date.getUTCDate() + 7);
+  } else if (recurrence === "monthly") {
+    const originalDay = date.getUTCDate();
+    date.setUTCDate(1);
+    date.setUTCMonth(date.getUTCMonth() + 1);
+    const nextMonthStart = new Date(date);
+    nextMonthStart.setUTCMonth(nextMonthStart.getUTCMonth() + 1);
+    const lastDay = new Date(nextMonthStart.getTime() - 86400000).getUTCDate();
+    date.setUTCDate(Math.min(originalDay, lastDay));
+  }
+
+  const result = date.toISOString().split("T")[0];
+  return result as string;
 }
