@@ -73,3 +73,42 @@ class Summary(BaseModel):
     month: str
     totals: list[CategoryTotal]
     total: Decimal
+
+
+class RecurrenceFrequency(str, Enum):
+    """How often a recurring transaction repeats."""
+
+    daily = "daily"
+    weekly = "weekly"
+    monthly = "monthly"
+
+
+class RecurringRuleIn(BaseModel):
+    """A new recurring transaction rule to define."""
+
+    amount: Decimal = Field(..., description="Amount in the major currency unit, e.g. 12.50.")
+    category: Category
+    description: str = Field(default="", max_length=200)
+    frequency: RecurrenceFrequency
+    start_date: date
+    end_date: date | None = None
+
+    @field_validator("amount")
+    @classmethod
+    def amount_rounds_to_a_positive_cent(cls, value: Decimal) -> Decimal:
+        """Reject amounts that do not round to at least one cent."""
+        if to_cents(value) <= 0:
+            raise ValueError("amount must be at least one cent")
+        return value
+
+
+class RecurringRuleOut(BaseModel):
+    """A stored recurring transaction rule returned to the client."""
+
+    id: int
+    amount: Decimal
+    category: Category
+    description: str
+    frequency: RecurrenceFrequency
+    start_date: date
+    end_date: date | None

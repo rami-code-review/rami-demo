@@ -18,6 +18,15 @@ CREATE TABLE IF NOT EXISTS transactions (
     date        TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
+CREATE TABLE IF NOT EXISTS recurring_rules (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    amount_cents INTEGER NOT NULL,
+    category     TEXT    NOT NULL,
+    description  TEXT    NOT NULL DEFAULT '',
+    frequency    TEXT    NOT NULL,
+    start_date   TEXT    NOT NULL,
+    end_date     TEXT
+);
 """
 
 

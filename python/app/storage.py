@@ -11,6 +11,9 @@ from decimal import Decimal, InvalidOperation
 
 from .models import (
     CategoryTotal,
+    RecurringRuleIn,
+    RecurringRuleOut,
+    RecurrenceFrequency,
     Summary,
     TransactionIn,
     TransactionOut,
@@ -231,3 +234,110 @@ def import_transactions(
             inserted.append(create_transaction(conn, tx_in, autocommit=False))
 
     return inserted
+
+
+def _row_to_recurring_rule(row: sqlite3.Row) -> RecurringRuleOut:
+    """Map a database row to a RecurringRuleOut."""
+    return RecurringRuleOut(
+        id=row["id"],
+        amount=from_cents(row["amount_cents"]),
+        category=row["category"],
+        description=row["description"],
+        frequency=row["frequency"],
+        start_date=row["start_date"],
+        end_date=row["end_date"],
+    )
+
+
+def create_recurring_rule(conn: sqlite3.Connection, rule: RecurringRuleIn) -> RecurringRuleOut:
+    """Insert a recurring rule and return the stored row."""
+    row = conn.execute(
+        "INSERT INTO recurring_rules (amount_cents, category, description, frequency, start_date, end_date) "
+        "VALUES (?, ?, ?, ?, ?, ?) "
+        "RETURNING id, amount_cents, category, description, frequency, start_date, end_date",
+        (to_cents(rule.amount), rule.category.value, rule.description, rule.frequency.value,
+         rule.start_date.isoformat(), rule.end_date.isoformat() if rule.end_date else None),
+    ).fetchone()
+    if row is None:
+        raise RuntimeError("INSERT did not return a row")
+    conn.commit()
+    return _row_to_recurring_rule(row)
+
+
+def _generate_occurrences(start_date: date, end_date: date | None, frequency: str, up_to: date) -> list[date]:
+    """Generate occurrence dates for a recurring rule up to a given date."""
+    from datetime import timedelta
+
+    occurrences = []
+    current = start_date
+
+    if frequency == "daily":
+        while current <= up_to:
+            if end_date is None or current <= end_date:
+                occurrences.append(current)
+            current += timedelta(days=1)
+    elif frequency == "weekly":
+        while current <= up_to:
+            if end_date is None or current <= end_date:
+                occurrences.append(current)
+            current += timedelta(days=7)
+    elif frequency == "monthly":
+        while current <= up_to:
+            if end_date is None or current <= end_date:
+                occurrences.append(current)
+            if current.month == 12:
+                current = date(current.year + 1, 1, current.day)
+            else:
+                next_month = current.month + 1
+                next_year = current.year
+                try:
+                    current = date(next_year, next_month, current.day)
+                except ValueError:
+                    day = 28
+                    while day > 0:
+                        try:
+                            current = date(next_year, next_month, day)
+                            break
+                        except ValueError:
+                            day -= 1
+
+    return occurrences
+
+
+def generate_due_transactions(conn: sqlite3.Connection, up_to: date) -> list[TransactionOut]:
+    """Generate and insert transactions from recurring rules up to a given date."""
+    rows = conn.execute(
+        "SELECT id, amount_cents, category, description, frequency, start_date, end_date "
+        "FROM recurring_rules"
+    ).fetchall()
+
+    generated = []
+    with conn:
+        for row in rows:
+            start_date = date.fromisoformat(row["start_date"])
+            end_date = date.fromisoformat(row["end_date"]) if row["end_date"] else None
+            frequency = row["frequency"]
+
+            occurrences = _generate_occurrences(start_date, end_date, frequency, up_to)
+
+            existing_dates = set()
+            existing_rows = conn.execute(
+                "SELECT DISTINCT date FROM transactions WHERE category = ? AND amount_cents = ? AND description = ?",
+                (row["category"], row["amount_cents"], row["description"]),
+            ).fetchall()
+            for existing_row in existing_rows:
+                existing_dates.add(existing_row["date"])
+
+            for occurrence in occurrences:
+                occurrence_iso = occurrence.isoformat()
+                if occurrence_iso not in existing_dates:
+                    tx_row = conn.execute(
+                        "INSERT INTO transactions (amount_cents, category, description, date) "
+                        "VALUES (?, ?, ?, ?) "
+                        "RETURNING id, amount_cents, category, description, date",
+                        (row["amount_cents"], row["category"], row["description"], occurrence_iso),
+                    ).fetchone()
+                    if tx_row is not None:
+                        generated.append(_row_to_transaction(tx_row))
+
+    return generated
