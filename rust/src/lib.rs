@@ -129,6 +129,9 @@ fn extract_leading_timestamp(line: &str) -> Option<String> {
         }
         timestamp.push(ch);
     }
+    if !timestamp.is_empty() && DateTime::parse_from_rfc3339(&timestamp).is_ok() {
+        return Some(timestamp);
+    }
     None
 }
 
@@ -397,5 +400,15 @@ mod tests {
         let written = filter_available(&mut reader, &mut out, None, false, Some("2026-07-10T14:30:00+00:00")).unwrap();
         assert_eq!(written, 1);
         assert_eq!(String::from_utf8(out).unwrap(), "2026-07-10T14:35:00+00:00 café\n");
+    }
+
+    #[test]
+    fn filter_available_with_since_handles_timestamp_only_line() {
+        let input = "2026-07-10T14:35:00+00:00\n2026-07-10T14:25:00+00:00\n";
+        let mut reader = std::io::Cursor::new(input);
+        let mut out = Vec::new();
+        let written = filter_available(&mut reader, &mut out, None, false, Some("2026-07-10T14:30:00+00:00")).unwrap();
+        assert_eq!(written, 1);
+        assert_eq!(String::from_utf8(out).unwrap(), "2026-07-10T14:35:00+00:00\n");
     }
 }
