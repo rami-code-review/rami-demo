@@ -339,16 +339,16 @@ def generate_due_transactions(conn: sqlite3.Connection, up_to: date) -> list[Tra
 
 def create_budget(conn: sqlite3.Connection, budget: BudgetIn) -> BudgetOut:
     """Insert or replace a budget and return the stored row."""
-    row = conn.execute(
-        "INSERT INTO budgets (category, month, amount_cents) "
-        "VALUES (?, ?, ?) "
-        "ON CONFLICT(category, month) DO UPDATE SET amount_cents = excluded.amount_cents "
-        "RETURNING id, category, month, amount_cents",
-        (budget.category.value, budget.month, to_cents(budget.amount)),
-    ).fetchone()
+    with conn:
+        row = conn.execute(
+            "INSERT INTO budgets (category, month, amount_cents) "
+            "VALUES (?, ?, ?) "
+            "ON CONFLICT(category, month) DO UPDATE SET amount_cents = excluded.amount_cents "
+            "RETURNING id, category, month, amount_cents",
+            (budget.category.value, budget.month, to_cents(budget.amount)),
+        ).fetchone()
     if row is None:
         raise RuntimeError("INSERT did not return a row")
-    conn.commit()
     return BudgetOut(
         id=row["id"],
         category=row["category"],
