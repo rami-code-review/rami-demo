@@ -173,3 +173,31 @@ def test_generate_occurrences_monthly_respects_end_date():
         date(2026, 1, 15),
         date(2026, 2, 15),
     ]
+
+
+def test_malformed_rule_does_not_block_valid_rules(db_file):
+    """Test that a rule with malformed date does not prevent other rules from generating."""
+    with closing_connection(db_file) as conn:
+        rule = RecurringRuleIn(
+            amount=50,
+            category=Category.food,
+            description="Valid weekly groceries",
+            frequency=RecurrenceFrequency.weekly,
+            start_date=date(2026, 1, 5),
+            end_date=date(2026, 1, 19),
+        )
+        create_recurring_rule(conn, rule)
+
+        conn.execute(
+            "INSERT INTO recurring_rules (amount_cents, category, description, frequency, start_date, end_date) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (3000, "food", "Bad rule", "weekly", "2026-13-01", None),
+        )
+        conn.commit()
+
+        generated = generate_due_transactions(conn, date(2026, 1, 19))
+
+    assert len(generated) == 3
+    assert all(tx.description == "Valid weekly groceries" for tx in generated)
+    dates = [tx.date for tx in generated]
+    assert dates == [date(2026, 1, 5), date(2026, 1, 12), date(2026, 1, 19)]

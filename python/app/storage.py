@@ -310,9 +310,13 @@ def generate_due_transactions(conn: sqlite3.Connection, up_to: date) -> list[Tra
     with conn:
         for row in rows:
             rule_id = row["id"]
-            start_date = date.fromisoformat(row["start_date"])
-            end_date = date.fromisoformat(row["end_date"]) if row["end_date"] else None
-            frequency = RecurrenceFrequency(row["frequency"])
+            try:
+                start_date = date.fromisoformat(row["start_date"])
+                end_date = date.fromisoformat(row["end_date"]) if row["end_date"] else None
+                frequency = RecurrenceFrequency(row["frequency"])
+            except (ValueError, KeyError) as e:
+                print(f"Skipping recurring rule {rule_id}: {e}", file=__import__("sys").stderr)
+                continue
 
             occurrences = _generate_occurrences(start_date, end_date, frequency, up_to)
 
