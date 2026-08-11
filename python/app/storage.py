@@ -264,7 +264,7 @@ def create_recurring_rule(conn: sqlite3.Connection, rule: RecurringRuleIn) -> Re
     return _row_to_recurring_rule(row)
 
 
-def _generate_occurrences(start_date: date, end_date: date | None, frequency: str, up_to: date) -> list[date]:
+def _generate_occurrences(start_date: date, end_date: date | None, frequency: RecurrenceFrequency, up_to: date) -> list[date]:
     """Generate occurrence dates for a recurring rule up to a given date."""
     from datetime import timedelta
 
@@ -272,17 +272,17 @@ def _generate_occurrences(start_date: date, end_date: date | None, frequency: st
     current = start_date
     anchor_day = start_date.day
 
-    if frequency == "daily":
+    if frequency == RecurrenceFrequency.daily:
         while current <= up_to:
             if end_date is None or current <= end_date:
                 occurrences.append(current)
             current += timedelta(days=1)
-    elif frequency == "weekly":
+    elif frequency == RecurrenceFrequency.weekly:
         while current <= up_to:
             if end_date is None or current <= end_date:
                 occurrences.append(current)
             current += timedelta(days=7)
-    elif frequency == "monthly":
+    elif frequency == RecurrenceFrequency.monthly:
         while current <= up_to:
             if end_date is None or current <= end_date:
                 occurrences.append(current)
@@ -293,6 +293,8 @@ def _generate_occurrences(start_date: date, end_date: date | None, frequency: st
             last_day_of_next = (next_month.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
             target_day = min(anchor_day, last_day_of_next.day)
             current = next_month.replace(day=target_day)
+    else:
+        raise ValueError(f"unrecognized frequency: {frequency}")
 
     return occurrences
 
@@ -310,28 +312,19 @@ def generate_due_transactions(conn: sqlite3.Connection, up_to: date) -> list[Tra
             rule_id = row["id"]
             start_date = date.fromisoformat(row["start_date"])
             end_date = date.fromisoformat(row["end_date"]) if row["end_date"] else None
-            frequency = row["frequency"]
+            frequency = RecurrenceFrequency(row["frequency"])
 
             occurrences = _generate_occurrences(start_date, end_date, frequency, up_to)
 
-            existing_dates = set()
-            existing_rows = conn.execute(
-                "SELECT DISTINCT date FROM transactions WHERE rule_id = ?",
-                (rule_id,),
-            ).fetchall()
-            for existing_row in existing_rows:
-                existing_dates.add(existing_row["date"])
-
             for occurrence in occurrences:
                 occurrence_iso = occurrence.isoformat()
-                if occurrence_iso not in existing_dates:
-                    tx_row = conn.execute(
-                        "INSERT INTO transactions (amount_cents, category, description, date, rule_id) "
-                        "VALUES (?, ?, ?, ?, ?) "
-                        "RETURNING id, amount_cents, category, description, date",
-                        (row["amount_cents"], row["category"], row["description"], occurrence_iso, rule_id),
-                    ).fetchone()
-                    if tx_row is not None:
-                        generated.append(_row_to_transaction(tx_row))
+                tx_row = conn.execute(
+                    "INSERT OR IGNORE INTO transactions (amount_cents, category, description, date, rule_id) "
+                    "VALUES (?, ?, ?, ?, ?) "
+                    "RETURNING id, amount_cents, category, description, date",
+                    (row["amount_cents"], row["category"], row["description"], occurrence_iso, rule_id),
+                ).fetchone()
+                if tx_row is not None:
+                    generated.append(_row_to_transaction(tx_row))
 
     return generated

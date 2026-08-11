@@ -16,7 +16,8 @@ CREATE TABLE IF NOT EXISTS transactions (
     category    TEXT    NOT NULL,
     description TEXT    NOT NULL DEFAULT '',
     date        TEXT    NOT NULL,
-    rule_id     INTEGER
+    rule_id     INTEGER,
+    UNIQUE(rule_id, date)
 );
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
 CREATE TABLE IF NOT EXISTS recurring_rules (

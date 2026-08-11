@@ -133,7 +133,7 @@ def test_generate_occurrences_daily():
     occurrences = _generate_occurrences(
         date(2026, 1, 1),
         date(2026, 1, 5),
-        "daily",
+        RecurrenceFrequency.daily,
         date(2026, 1, 5),
     )
     assert occurrences == [
@@ -150,7 +150,7 @@ def test_generate_occurrences_weekly():
     occurrences = _generate_occurrences(
         date(2026, 1, 1),
         None,
-        "weekly",
+        RecurrenceFrequency.weekly,
         date(2026, 1, 22),
     )
     assert occurrences == [
@@ -166,7 +166,7 @@ def test_generate_occurrences_monthly_respects_end_date():
     occurrences = _generate_occurrences(
         date(2026, 1, 15),
         date(2026, 2, 15),
-        "monthly",
+        RecurrenceFrequency.monthly,
         date(2026, 3, 15),
     )
     assert occurrences == [
