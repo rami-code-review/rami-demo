@@ -315,3 +315,90 @@ func TestShortenRateLimitPerIP(t *testing.T) {
 	}
 	resp2.Body.Close()
 }
+
+func TestShortenWithCustomCode(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	resp := shorten(t, srv, `{"url":"https://example.com/path","code":"mycode"}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", resp.StatusCode)
+	}
+	var out shortenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if out.Code != "mycode" {
+		t.Errorf("code = %q, want mycode", out.Code)
+	}
+	if want := "http://short.test/mycode"; out.ShortURL != want {
+		t.Errorf("short_url = %q, want %q", out.ShortURL, want)
+	}
+}
+
+func TestShortenCustomCodeConflict(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	first := shorten(t, srv, `{"url":"https://example.com/one","code":"taken"}`)
+	if first.StatusCode != http.StatusCreated {
+		t.Fatalf("first request: status = %d, want 201", first.StatusCode)
+	}
+	first.Body.Close()
+
+	second := shorten(t, srv, `{"url":"https://example.com/two","code":"taken"}`)
+	defer second.Body.Close()
+
+	if second.StatusCode != http.StatusConflict {
+		t.Errorf("second request: status = %d, want 409", second.StatusCode)
+	}
+}
+
+func TestShortenCustomCodeResolves(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+	client := noRedirectClient()
+
+	resp := shorten(t, srv, `{"url":"https://example.com/dest","code":"custom"}`)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("shorten: status = %d, want 201", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	resolveResp, err := client.Get(srv.URL + "/custom")
+	if err != nil {
+		t.Fatalf("GET /custom: %v", err)
+	}
+	defer resolveResp.Body.Close()
+
+	if resolveResp.StatusCode != http.StatusFound {
+		t.Errorf("status = %d, want 302", resolveResp.StatusCode)
+	}
+	if loc := resolveResp.Header.Get("Location"); loc != "https://example.com/dest" {
+		t.Errorf("Location = %q, want https://example.com/dest", loc)
+	}
+}
+
+func TestShortenOmittedCodeGeneratesRandom(t *testing.T) {
+	srv := newTestServer()
+	defer srv.Close()
+
+	resp := shorten(t, srv, `{"url":"https://example.com"}`)
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want 201", resp.StatusCode)
+	}
+	var out shortenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if out.Code == "" {
+		t.Error("expected a non-empty random code")
+	}
+	if len(out.Code) != defaultCodeLength {
+		t.Errorf("code length = %d, want %d", len(out.Code), defaultCodeLength)
+	}
+}

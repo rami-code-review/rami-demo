@@ -11,6 +11,7 @@ import (
 
 type shortenRequest struct {
 	URL              string `json:"url"`
+	Code             string `json:"code,omitempty"`
 	ExpiresInSeconds int64  `json:"expires_in_seconds,omitempty"`
 }
 
@@ -103,7 +104,17 @@ func (h *Handler) shorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	link, err := h.store.Create(req.URL, req.ExpiresInSeconds)
+	var link Link
+	var err error
+	if req.Code != "" {
+		link, err = h.store.CreateWithCode(req.URL, req.Code, req.ExpiresInSeconds)
+		if err == ErrCodeTaken {
+			writeError(w, http.StatusConflict, "short code already taken")
+			return
+		}
+	} else {
+		link, err = h.store.Create(req.URL, req.ExpiresInSeconds)
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not create short link")
 		return
