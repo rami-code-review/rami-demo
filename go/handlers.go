@@ -2,9 +2,11 @@ package main
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 )
 
 type shortenRequest struct {
@@ -19,13 +21,18 @@ type shortenResponse struct {
 
 // Handler wires the store to HTTP routes.
 type Handler struct {
-	store   *Store
-	baseURL string
+	store       *Store
+	baseURL     string
+	rateLimiter *RateLimiter
 }
 
 // NewHandler returns an http.Handler serving the shortener API.
 func NewHandler(store *Store, baseURL string) http.Handler {
-	h := &Handler{store: store, baseURL: strings.TrimRight(baseURL, "/")}
+	h := &Handler{
+		store:       store,
+		baseURL:     strings.TrimRight(baseURL, "/"),
+		rateLimiter: NewRateLimiter(10, 60*time.Second),
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /shorten", h.shorten)
@@ -53,7 +60,25 @@ func validShortenURL(raw string) bool {
 	return (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }
 
+// clientIP extracts the client IP from the request.
+func clientIP(r *http.Request) string {
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		if ip, _, err := net.SplitHostPort(forwarded); err == nil {
+			return ip
+		}
+		return forwarded
+	}
+	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	return ip
+}
+
 func (h *Handler) shorten(w http.ResponseWriter, r *http.Request) {
+	ip := clientIP(r)
+	if !h.rateLimiter.Allow(ip) {
+		writeError(w, http.StatusTooManyRequests, "rate limit exceeded")
+		return
+	}
+
 	var req shortenRequest
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&req); err != nil {

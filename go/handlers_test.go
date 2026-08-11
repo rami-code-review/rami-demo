@@ -138,7 +138,11 @@ func TestStatsUnknownReturns404(t *testing.T) {
 
 func TestShortenWithExpiry(t *testing.T) {
 	s := newTestStore()
-	h := &Handler{store: s, baseURL: "http://short.test"}
+	h := &Handler{
+		store:       s,
+		baseURL:     "http://short.test",
+		rateLimiter: NewRateLimiter(10, 60*time.Second),
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /shorten", h.shorten)
 	mux.HandleFunc("GET /api/stats/{code}", h.stats)
@@ -186,7 +190,11 @@ func TestResolveExpiredLinkReturns404(t *testing.T) {
 		return time.Date(2026, 6, 1, 13, 1, 0, 0, time.UTC)
 	}
 
-	h := &Handler{store: s, baseURL: "http://short.test"}
+	h := &Handler{
+		store:       s,
+		baseURL:     "http://short.test",
+		rateLimiter: NewRateLimiter(10, 60*time.Second),
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{code}", h.resolve)
 	srv := httptest.NewServer(mux)
@@ -225,4 +233,85 @@ func TestShortenRejectsExcessiveExpiry(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400", resp.StatusCode)
 	}
+}
+
+func newTestHandlerWithRateLimit(maxRequests int, windowDuration time.Duration) *Handler {
+	s := newTestStore()
+	h := &Handler{
+		store:       s,
+		baseURL:     "http://short.test",
+		rateLimiter: NewRateLimiter(maxRequests, windowDuration),
+	}
+	fixed := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	h.rateLimiter.now = func() time.Time { return fixed }
+	return h
+}
+
+func TestShortenRateLimitUnderLimit(t *testing.T) {
+	h := newTestHandlerWithRateLimit(2, 60*time.Second)
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /shorten", h.shorten)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	for i := 1; i <= 2; i++ {
+		resp := shorten(t, srv, `{"url":"https://example.com"}`)
+		if resp.StatusCode != http.StatusCreated {
+			t.Errorf("request %d: status = %d, want 201", i, resp.StatusCode)
+		}
+		resp.Body.Close()
+	}
+}
+
+func TestShortenRateLimitExceeded(t *testing.T) {
+	h := newTestHandlerWithRateLimit(1, 60*time.Second)
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /shorten", h.shorten)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp := shorten(t, srv, `{"url":"https://example.com"}`)
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("first request: status = %d, want 201", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	resp = shorten(t, srv, `{"url":"https://example.com"}`)
+	if resp.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("second request: status = %d, want 429", resp.StatusCode)
+	}
+	resp.Body.Close()
+}
+
+func TestShortenRateLimitPerIP(t *testing.T) {
+	s := newTestStore()
+	h := &Handler{
+		store:       s,
+		baseURL:     "http://short.test",
+		rateLimiter: NewRateLimiter(1, 60*time.Second),
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /shorten", h.shorten)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	req1, _ := http.NewRequest("POST", srv.URL+"/shorten", strings.NewReader(`{"url":"https://example.com"}`))
+	req1.Header.Set("Content-Type", "application/json")
+	req1.Header.Set("X-Forwarded-For", "192.168.1.1")
+
+	resp1, _ := http.DefaultClient.Do(req1)
+	if resp1.StatusCode != http.StatusCreated {
+		t.Errorf("IP1 first: status = %d, want 201", resp1.StatusCode)
+	}
+	resp1.Body.Close()
+
+	req2, _ := http.NewRequest("POST", srv.URL+"/shorten", strings.NewReader(`{"url":"https://example.com"}`))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("X-Forwarded-For", "192.168.1.2")
+
+	resp2, _ := http.DefaultClient.Do(req2)
+	if resp2.StatusCode != http.StatusCreated {
+		t.Errorf("IP2 first: status = %d, want 201", resp2.StatusCode)
+	}
+	resp2.Body.Close()
 }
