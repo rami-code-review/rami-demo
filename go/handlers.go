@@ -13,6 +13,7 @@ type shortenRequest struct {
 	URL              string `json:"url"`
 	Code             string `json:"code,omitempty"`
 	ExpiresInSeconds int64  `json:"expires_in_seconds,omitempty"`
+	MaxClicks        int64  `json:"max_clicks,omitempty"`
 }
 
 type shortenResponse struct {
@@ -117,6 +118,10 @@ func (h *Handler) shorten(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "expires_in_seconds must be at most 10 years")
 		return
 	}
+	if req.MaxClicks < 0 {
+		writeError(w, http.StatusBadRequest, "max_clicks must be non-negative")
+		return
+	}
 
 	var link Link
 	var err error
@@ -125,13 +130,13 @@ func (h *Handler) shorten(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "code must be alphanumeric and at most 32 characters")
 			return
 		}
-		link, err = h.store.CreateWithCode(req.URL, req.Code, req.ExpiresInSeconds)
+		link, err = h.store.CreateWithCode(req.URL, req.Code, req.ExpiresInSeconds, req.MaxClicks)
 		if err == ErrCodeTaken {
 			writeError(w, http.StatusConflict, "short code already taken")
 			return
 		}
 	} else {
-		link, err = h.store.Create(req.URL, req.ExpiresInSeconds)
+		link, err = h.store.Create(req.URL, req.ExpiresInSeconds, req.MaxClicks)
 	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not create short link")

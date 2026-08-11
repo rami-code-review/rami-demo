@@ -13,6 +13,7 @@ type Link struct {
 	Clicks    int64      `json:"clicks"`
 	CreatedAt time.Time  `json:"created_at"`
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	MaxClicks *int64     `json:"max_clicks,omitempty"`
 }
 
 // ErrCodeExhausted is returned when a unique code could not be generated.
@@ -35,17 +36,19 @@ func NewStore() *Store {
 
 // Create stores a URL under a freshly generated unique code and returns the link.
 // If expiresInSeconds is > 0, the link will expire after that duration.
-func (s *Store) Create(url string, expiresInSeconds int64) (Link, error) {
-	return s.createWithCode(url, "", expiresInSeconds)
+// If maxClicks is > 0, the link will retire after that many clicks.
+func (s *Store) Create(url string, expiresInSeconds int64, maxClicks int64) (Link, error) {
+	return s.createWithCode(url, "", expiresInSeconds, maxClicks)
 }
 
 // CreateWithCode stores a URL under a specified code if available, or generates
 // a random one if code is empty. Returns ErrCodeTaken if the code is already in use.
-func (s *Store) CreateWithCode(url, code string, expiresInSeconds int64) (Link, error) {
-	return s.createWithCode(url, code, expiresInSeconds)
+// If maxClicks is > 0, the link will retire after that many clicks.
+func (s *Store) CreateWithCode(url, code string, expiresInSeconds int64, maxClicks int64) (Link, error) {
+	return s.createWithCode(url, code, expiresInSeconds, maxClicks)
 }
 
-func (s *Store) createWithCode(url, customCode string, expiresInSeconds int64) (Link, error) {
+func (s *Store) createWithCode(url, customCode string, expiresInSeconds int64, maxClicks int64) (Link, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -76,12 +79,15 @@ func (s *Store) createWithCode(url, customCode string, expiresInSeconds int64) (
 		expiresAt := s.now().Add(time.Duration(expiresInSeconds) * time.Second)
 		link.ExpiresAt = &expiresAt
 	}
+	if maxClicks > 0 {
+		link.MaxClicks = &maxClicks
+	}
 	s.links[code] = link
 	return *link, nil
 }
 
 // Resolve returns the URL for a code and increments its click count.
-// Returns false if the code does not exist or has expired.
+// Returns false if the code does not exist, has expired, or has reached its click cap.
 func (s *Store) Resolve(code string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -93,7 +99,13 @@ func (s *Store) Resolve(code string) (string, bool) {
 	if link.ExpiresAt != nil && s.now().After(*link.ExpiresAt) {
 		return "", false
 	}
+	if link.MaxClicks != nil && link.Clicks >= *link.MaxClicks {
+		return "", false
+	}
 	link.Clicks++
+	if link.MaxClicks != nil && link.Clicks >= *link.MaxClicks {
+		delete(s.links, code)
+	}
 	return link.URL, true
 }
 
