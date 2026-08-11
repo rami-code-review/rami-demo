@@ -4,7 +4,7 @@ use std::process::ExitCode;
 use std::thread;
 use std::time::Duration;
 
-use logtail::{filter_available_with_prefix, parse_args, Config, USAGE};
+use logtail::{filter_available_with_prefix_and_color, parse_args, Config, USAGE};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(200);
 
@@ -74,13 +74,14 @@ fn run(config: &Config) -> io::Result<()> {
                 } else {
                     None
                 };
-                if let Err(err) = filter_available_with_prefix(
+                if let Err(err) = filter_available_with_prefix_and_color(
                     &mut file_reader.reader,
                     &mut out,
                     config.matcher.as_ref(),
                     config.invert,
                     config.since,
                     prefix,
+                    config.color,
                 ) {
                     eprintln!("logtail: {}: {}", file_reader.path, err);
                 }

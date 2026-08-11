@@ -17,6 +17,13 @@ impl Matcher {
             Matcher::Regex(re) => re.is_match(text),
         }
     }
+
+    fn find_match(&self, text: &str) -> Option<(usize, usize)> {
+        match self {
+            Matcher::Substring(s) => text.find(s).map(|start| (start, start + s.len())),
+            Matcher::Regex(re) => re.find(text).map(|m| (m.start(), m.end())),
+        }
+    }
 }
 
 /// How `logtail` was configured to run.
@@ -32,6 +39,8 @@ pub struct Config {
     pub invert: bool,
     /// Show only lines with timestamps at or after this time; `None` keeps every line.
     pub since: Option<DateTime<FixedOffset>>,
+    /// Highlight matched portions with ANSI color codes.
+    pub color: bool,
 }
 
 /// An error in the command-line arguments.
@@ -47,7 +56,7 @@ impl std::fmt::Display for ParseError {
 impl std::error::Error for ParseError {}
 
 /// The usage string shown on a parse error or `--help`.
-pub const USAGE: &str = "usage: logtail [--filter <substring>] [--regex] [--invert] [--from-start] [--since <timestamp>] <file> [<file> ...]";
+pub const USAGE: &str = "usage: logtail [--filter <substring>] [--regex] [--invert] [--from-start] [--since <timestamp>] [--color] <file> [<file> ...]";
 
 /// Parse command-line arguments (excluding the program name) into a [`Config`].
 pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, ParseError> {
@@ -56,6 +65,7 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, Par
     let mut invert = false;
     let mut regex_mode = false;
     let mut since = None;
+    let mut color = false;
     let mut paths = Vec::new();
 
     let mut iter = args.into_iter();
@@ -76,6 +86,7 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, Par
                     .ok_or_else(|| ParseError("--since requires a value".to_string()))?;
                 since = Some(validate_timestamp(&value)?);
             }
+            "--color" => color = true,
             other if other.starts_with("--") => {
                 return Err(ParseError(format!("unknown flag: {other}")));
             }
@@ -105,6 +116,7 @@ pub fn parse_args<I: IntoIterator<Item = String>>(args: I) -> Result<Config, Par
             from_start,
             invert,
             since,
+            color,
         })
     }
 }
@@ -148,6 +160,20 @@ pub fn matches(line: &str, matcher: Option<&Matcher>, invert: bool) -> bool {
     }
 }
 
+fn colorize_match(line: &str, matcher: &Matcher) -> String {
+    if let Some((start, end)) = matcher.find_match(line) {
+        let mut result = String::new();
+        result.push_str(&line[..start]);
+        result.push_str("\x1b[31m");
+        result.push_str(&line[start..end]);
+        result.push_str("\x1b[0m");
+        result.push_str(&line[end..]);
+        result
+    } else {
+        line.to_string()
+    }
+}
+
 pub fn filter_available<R: BufRead, W: Write>(
     reader: &mut R,
     out: &mut W,
@@ -166,6 +192,18 @@ pub fn filter_available_with_prefix<R: BufRead, W: Write>(
     since: Option<DateTime<FixedOffset>>,
     prefix: Option<&str>,
 ) -> io::Result<usize> {
+    filter_available_with_prefix_and_color(reader, out, matcher, invert, since, prefix, false)
+}
+
+pub fn filter_available_with_prefix_and_color<R: BufRead, W: Write>(
+    reader: &mut R,
+    out: &mut W,
+    matcher: Option<&Matcher>,
+    invert: bool,
+    since: Option<DateTime<FixedOffset>>,
+    prefix: Option<&str>,
+    color: bool,
+) -> io::Result<usize> {
     let mut written = 0;
     let mut line = String::new();
     loop {
@@ -176,10 +214,19 @@ pub fn filter_available_with_prefix<R: BufRead, W: Write>(
         }
         let trimmed = line.trim_end_matches(['\r', '\n']);
         if matches(trimmed, matcher, invert) && since.map_or(true, |s| is_after_since(trimmed, s)) {
-            if let Some(pfx) = prefix {
-                writeln!(out, "{}: {}", pfx, trimmed)?;
+            let output_line = if color && !invert {
+                if let Some(m) = matcher {
+                    colorize_match(trimmed, m)
+                } else {
+                    trimmed.to_string()
+                }
             } else {
-                writeln!(out, "{trimmed}")?;
+                trimmed.to_string()
+            };
+            if let Some(pfx) = prefix {
+                writeln!(out, "{}: {}", pfx, output_line)?;
+            } else {
+                writeln!(out, "{}", output_line)?;
             }
             written += 1;
         }
@@ -456,5 +503,55 @@ mod tests {
         let written = filter_available_with_prefix(&mut reader, &mut out, None, false, None, None).unwrap();
         assert_eq!(written, 2);
         assert_eq!(String::from_utf8(out).unwrap(), "line one\nline two\n");
+    }
+
+    #[test]
+    fn parses_color_flag() {
+        let config = parse(&["--color", "--filter", "ERROR", "app.log"]).unwrap();
+        assert_eq!(config.paths, vec!["app.log"]);
+        assert_eq!(config.color, true);
+    }
+
+    #[test]
+    fn color_defaults_to_false() {
+        let config = parse(&["app.log"]).unwrap();
+        assert_eq!(config.color, false);
+    }
+
+    #[test]
+    fn filter_available_with_color_highlights_substring_match() {
+        let input = "INFO start\nERROR boom\nINFO ok\n";
+        let mut reader = std::io::Cursor::new(input);
+        let mut out = Vec::new();
+        let matcher = Matcher::Substring("ERROR".to_string());
+        let written = filter_available_with_prefix_and_color(&mut reader, &mut out, Some(&matcher), false, None, None, true).unwrap();
+        assert_eq!(written, 1);
+        let output = String::from_utf8(out).unwrap();
+        assert!(output.contains("\x1b[31mERROR\x1b[0m"));
+    }
+
+    #[test]
+    fn filter_available_with_color_highlights_regex_match() {
+        let input = "ERROR: boom\nINFO: ok\nERROR: again\n";
+        let mut reader = std::io::Cursor::new(input);
+        let mut out = Vec::new();
+        let matcher = Matcher::Regex(Regex::new("^ERROR").unwrap());
+        let written = filter_available_with_prefix_and_color(&mut reader, &mut out, Some(&matcher), false, None, None, true).unwrap();
+        assert_eq!(written, 2);
+        let output = String::from_utf8(out).unwrap();
+        assert!(output.contains("\x1b[31mERROR\x1b[0m: boom"));
+        assert!(output.contains("\x1b[31mERROR\x1b[0m: again"));
+    }
+
+    #[test]
+    fn filter_available_without_color_does_not_highlight() {
+        let input = "INFO start\nERROR boom\nINFO ok\n";
+        let mut reader = std::io::Cursor::new(input);
+        let mut out = Vec::new();
+        let matcher = Matcher::Substring("ERROR".to_string());
+        let written = filter_available_with_prefix_and_color(&mut reader, &mut out, Some(&matcher), false, None, None, false).unwrap();
+        assert_eq!(written, 1);
+        let output = String::from_utf8(out).unwrap();
+        assert_eq!(output, "ERROR boom\n");
     }
 }
