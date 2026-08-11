@@ -119,7 +119,7 @@ fn validate_timestamp(s: &str) -> Result<DateTime<FixedOffset>, ParseError> {
 fn extract_leading_timestamp(line: &str) -> Option<String> {
     let mut timestamp = String::new();
     for ch in line.chars() {
-        if ch == ' ' && !timestamp.is_empty() {
+        if ch.is_whitespace() && !timestamp.is_empty() {
             if DateTime::parse_from_rfc3339(&timestamp).is_ok() {
                 return Some(timestamp);
             }
@@ -405,5 +405,16 @@ mod tests {
         let written = filter_available(&mut reader, &mut out, None, false, Some(since_dt)).unwrap();
         assert_eq!(written, 1);
         assert_eq!(String::from_utf8(out).unwrap(), "2026-07-10T14:35:00+00:00\n");
+    }
+
+    #[test]
+    fn filter_available_with_since_handles_tab_delimited_timestamp() {
+        let input = "2026-07-10T14:35:00+00:00\tafter\n2026-07-10T14:25:00+00:00\tbefore\n";
+        let mut reader = std::io::Cursor::new(input);
+        let mut out = Vec::new();
+        let since_dt = DateTime::parse_from_rfc3339("2026-07-10T14:30:00+00:00").unwrap();
+        let written = filter_available(&mut reader, &mut out, None, false, Some(since_dt)).unwrap();
+        assert_eq!(written, 1);
+        assert_eq!(String::from_utf8(out).unwrap(), "2026-07-10T14:35:00+00:00\tafter\n");
     }
 }
