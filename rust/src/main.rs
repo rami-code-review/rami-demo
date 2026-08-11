@@ -65,7 +65,7 @@ fn run(config: &Config) -> io::Result<()> {
         ));
     }
 
-    let show_prefix = config.paths.len() > 1;
+    let show_prefix = readers.len() > 1;
     let stdout = io::stdout();
     loop {
         {

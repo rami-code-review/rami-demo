@@ -175,3 +175,27 @@ fn one_missing_file_continues_with_existing() {
 
     File::open(&missing_path).expect_err("should not be able to open missing file");
 }
+
+/// When one file fails to open (missing), the present file is followed without prefix.
+#[test]
+fn one_present_one_missing_file_shows_no_prefix() {
+    let dir = tempdir().unwrap();
+    let existing_path = dir.path().join("existing.log");
+
+    let mut writer = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&existing_path)
+        .unwrap();
+    writeln!(writer, "line from existing").unwrap();
+    writer.flush().unwrap();
+
+    let mut existing_reader = BufReader::new(File::open(&existing_path).unwrap());
+
+    let mut out = Vec::new();
+    let written = filter_available_with_prefix(&mut existing_reader, &mut out, None, false, None, None).unwrap();
+
+    assert_eq!(written, 1);
+    let output = String::from_utf8(out).unwrap();
+    assert_eq!(output, "line from existing\n");
+}
