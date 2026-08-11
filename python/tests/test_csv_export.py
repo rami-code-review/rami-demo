@@ -97,3 +97,32 @@ def test_export_empty_csv(client: TestClient) -> None:
     response = client.get("/transactions/export")
     assert response.status_code == 200
     assert "amount,category,description,date" in response.text
+
+
+def test_export_csv_formula_injection_protection(client: TestClient) -> None:
+    client.post(
+        "/transactions",
+        json={
+            "amount": "10.00",
+            "category": "food",
+            "description": "=1+1",
+            "date": "2026-06-01",
+        },
+    )
+    client.post(
+        "/transactions",
+        json={
+            "amount": "20.00",
+            "category": "food",
+            "description": "@SUM(A1)",
+            "date": "2026-06-02",
+        },
+    )
+    response = client.get("/transactions/export")
+    assert response.status_code == 200
+
+    reader = csv.DictReader(StringIO(response.text))
+    rows = list(reader)
+    assert len(rows) == 2
+    assert rows[0]["description"] == "'@SUM(A1)"
+    assert rows[1]["description"] == "'=1+1"
