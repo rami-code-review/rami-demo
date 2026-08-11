@@ -1,7 +1,7 @@
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Seek, SeekFrom, Write};
 
-use logtail::filter_available;
+use logtail::{filter_available, Matcher};
 use tempfile::tempdir;
 
 /// Reading available lines, then more after the file grows, mirrors `tail -f` over a real file.
@@ -22,7 +22,8 @@ fn reads_appended_lines_incrementally() {
     let mut reader = BufReader::new(File::open(&path).unwrap());
 
     let mut out = Vec::new();
-    let written = filter_available(&mut reader, &mut out, Some("ERROR"), false).unwrap();
+    let matcher = Matcher::Substring("ERROR".to_string());
+    let written = filter_available(&mut reader, &mut out, Some(&matcher), false).unwrap();
     assert_eq!(written, 1);
     assert_eq!(String::from_utf8(out.clone()).unwrap(), "ERROR first\n");
 
@@ -32,7 +33,7 @@ fn reads_appended_lines_incrementally() {
     writer.flush().unwrap();
 
     out.clear();
-    let written = filter_available(&mut reader, &mut out, Some("ERROR"), false).unwrap();
+    let written = filter_available(&mut reader, &mut out, Some(&matcher), false).unwrap();
     assert_eq!(written, 1);
     assert_eq!(String::from_utf8(out).unwrap(), "ERROR second\n");
 }
@@ -82,7 +83,8 @@ fn invert_shows_non_matching_lines() {
     let mut reader = BufReader::new(File::open(&path).unwrap());
 
     let mut out = Vec::new();
-    let written = filter_available(&mut reader, &mut out, Some("ERROR"), true).unwrap();
+    let matcher = Matcher::Substring("ERROR".to_string());
+    let written = filter_available(&mut reader, &mut out, Some(&matcher), true).unwrap();
     assert_eq!(written, 2);
     assert_eq!(String::from_utf8(out).unwrap(), "INFO boot\nINFO ok\n");
 }
