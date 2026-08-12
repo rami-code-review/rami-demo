@@ -112,3 +112,39 @@ class RecurringRuleOut(BaseModel):
     frequency: RecurrenceFrequency
     start_date: date
     end_date: date | None
+
+
+class BudgetIn(BaseModel):
+    """A new budget to set for a category in a month."""
+
+    category: Category
+    month: str = Field(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
+    amount: Decimal = Field(..., description="Monthly cap in the major currency unit, e.g. 500.00.")
+
+    @field_validator("amount")
+    @classmethod
+    def amount_rounds_to_a_positive_cent(cls, value: Decimal) -> Decimal:
+        """Reject amounts that do not round to at least one cent."""
+        if to_cents(value) <= 0:
+            raise ValueError("amount must be at least one cent")
+        return value
+
+
+class BudgetOut(BaseModel):
+    """A stored budget returned to the client."""
+
+    id: int
+    category: Category
+    month: str
+    amount: Decimal
+
+
+class BudgetStatus(BaseModel):
+    """Budget status for a category in a given month."""
+
+    category: Category
+    month: str
+    cap: Decimal
+    spent: Decimal
+    remaining: Decimal
+    percentage: Decimal = Field(..., description="Percentage of budget used (0-100).")

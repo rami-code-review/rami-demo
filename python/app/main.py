@@ -13,7 +13,16 @@ from fastapi.responses import StreamingResponse
 
 from . import storage
 from .db import closing_connection, init_db
-from .models import RecurringRuleIn, RecurringRuleOut, Summary, TransactionIn, TransactionOut
+from .models import (
+    BudgetIn,
+    BudgetOut,
+    BudgetStatus,
+    RecurringRuleIn,
+    RecurringRuleOut,
+    Summary,
+    TransactionIn,
+    TransactionOut,
+)
 from .storage import RowError
 
 MONTH_PATTERN = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
@@ -145,3 +154,24 @@ def generate_recurring_transactions(
     except ValueError:
         raise HTTPException(status_code=422, detail="up_to must be formatted YYYY-MM-DD")
     return storage.generate_due_transactions(conn, up_to_date)
+
+
+@app.post("/budgets", response_model=BudgetOut, status_code=201)
+def create_budget(
+    budget: BudgetIn, conn: sqlite3.Connection = Depends(get_db)
+) -> BudgetOut:
+    """Set a monthly spending cap for a category."""
+    return storage.create_budget(conn, budget)
+
+
+@app.get("/budgets/{category}/{month}", response_model=BudgetStatus)
+def get_budget_status(
+    category: str, month: str, conn: sqlite3.Connection = Depends(get_db)
+) -> BudgetStatus:
+    """Get the budget status for a category in a given month."""
+    if not MONTH_PATTERN.match(month):
+        raise HTTPException(status_code=422, detail="month must be formatted YYYY-MM")
+    status = storage.get_budget_status(conn, category, month)
+    if status is None:
+        raise HTTPException(status_code=404, detail="budget not found")
+    return status
