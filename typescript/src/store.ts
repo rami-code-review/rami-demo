@@ -5,6 +5,7 @@ import { getNextDueDate } from "./task.js";
 /** An in-memory store of tasks. Swap this out for a database to add persistence. */
 export class TaskStore {
   private tasks = new Map<string, Task>();
+  private nextOrder = 0;
 
   create(title: string, tags?: string[], recurrence?: Recurrence, dueDate?: string): Task {
     const task: Task = {
@@ -15,6 +16,7 @@ export class TaskStore {
       tags: tags && tags.length > 0 ? tags : undefined,
       recurrence,
       dueDate,
+      order: this.nextOrder++,
     };
     this.tasks.set(task.id, task);
     return task;
@@ -26,7 +28,7 @@ export class TaskStore {
 
   list(status: TaskStatus = "all", tag?: string, search?: string): Task[] {
     const all = [...this.tasks.values()].sort((a, b) =>
-      a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0,
+      (a.order ?? 0) < (b.order ?? 0) ? -1 : (a.order ?? 0) > (b.order ?? 0) ? 1 : 0,
     );
     let filtered = all;
     if (status === "active") filtered = all.filter((t) => !t.done);
@@ -62,6 +64,7 @@ export class TaskStore {
         tags: existing.tags,
         recurrence: existing.recurrence,
         dueDate: nextDueDate,
+        order: this.nextOrder++,
       };
       this.tasks.set(nextTask.id, nextTask);
     }
@@ -102,6 +105,7 @@ export class TaskStore {
               tags: existing.tags,
               recurrence: existing.recurrence,
               dueDate: nextDueDate,
+              order: this.nextOrder++,
             };
             this.tasks.set(nextTask.id, nextTask);
           }
@@ -119,5 +123,37 @@ export class TaskStore {
     }
 
     return { succeeded, failed, failedIds };
+  }
+
+  reorder(ids: string[]): boolean {
+    const uniqueIds = [...new Set(ids)];
+
+    if (uniqueIds.length !== ids.length) {
+      return false;
+    }
+
+    for (const id of uniqueIds) {
+      if (!this.tasks.has(id)) {
+        return false;
+      }
+    }
+
+    const reorderedIds = new Set(uniqueIds);
+    const remaining = [...this.tasks.values()]
+      .filter((t) => !reorderedIds.has(t.id))
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+    for (let i = 0; i < uniqueIds.length; i++) {
+      const id = uniqueIds[i]!;
+      const task = this.tasks.get(id)!;
+      this.tasks.set(id, { ...task, order: i });
+    }
+
+    for (let i = 0; i < remaining.length; i++) {
+      const task = remaining[i]!;
+      this.tasks.set(task.id, { ...task, order: uniqueIds.length + i });
+    }
+
+    return true;
   }
 }
