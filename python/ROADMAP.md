@@ -12,6 +12,11 @@ summarizes a month.
   `DELETE /transactions/{id}`
 - `GET /summary?month=YYYY-MM` — per-category totals for a month
 - Eight fixed categories, amounts validated and stored as integer cents
+- **Search** — filter transactions by free text, category, and date range
+- **CSV import / export** — bulk-load and download transactions as CSV
+- **Recurring transactions** — rules that materialize on a daily/weekly/
+  monthly schedule
+- **Budgets** — a per-category monthly cap with spent/remaining status
 - Tests covering the endpoints and the summary
 
 See [`README.md`](README.md) to run it.
@@ -21,20 +26,20 @@ See [`README.md`](README.md) to run it.
 Pick one of these and open a PR. (Or invent your own — these are a menu,
 not a contract.)
 
-### CSV import
-Upload a CSV of transactions and import them into the ledger.
+### Recurring-rule editing
+Edit or cancel a recurring rule after it's created (change the amount,
+schedule, or end date).
 
-### Recurring transactions
-Entries that auto-create on a daily, weekly, or monthly schedule.
+### Monthly statement
+Generate a downloadable month-end statement (opening/closing balance,
+per-category breakdown, budget vs. actual).
 
-### Budgets
-A per-category monthly cap, with an indicator showing how much is left.
+### Multi-currency
+Record a transaction in a non-default currency and convert to the base
+currency for summaries.
 
-### Search
-Filter transactions by date range, category, and free text.
-
-### Export to CSV
-Download the current set of transactions as a CSV file.
+### Transaction tags
+Attach free-form tags to a transaction and filter/summarize by tag.
 
 ## How to contribute
 

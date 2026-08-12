@@ -69,6 +69,6 @@ tests/
 
 `createApp` takes a `TaskStore`, so tests build an app around a fresh
 store with no shared state. The layers are thin so a new feature has an
-obvious home: the [roadmap](ROADMAP.md) items (tagging, search, bulk
-actions, drag-to-reorder, recurring tasks) each slot into `store.ts` plus
-a route in `app.ts`.
+obvious home: the open [roadmap](ROADMAP.md) items (due dates, subtasks,
+priority + sort, CSV import) each slot into `store.ts` plus a route in
+`app.ts`.

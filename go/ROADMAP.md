@@ -12,6 +12,12 @@ The core slice: a stdlib `net/http` service over an in-memory store.
 - `GET /api/stats/{code}` → click stats
 - URL validation, collision-retried code generation, a concurrency-safe
   store (`go test -race`), and httptest endpoint tests
+- **Per-link expiration** — give a link an expiry, after which it stops
+  resolving
+- **Rate limiting** — throttle link creation per client IP
+- **Custom slugs** — choose your own short code instead of a random one
+- **Per-link click cap** — retire a link automatically after N clicks
+- **Admin endpoint** — `GET /api/admin/links` lists every link with stats
 
 See [`README.md`](README.md) to run it.
 
@@ -20,20 +26,18 @@ See [`README.md`](README.md) to run it.
 Pick one of these and open a PR. (Or invent your own — these are a menu,
 not a contract.)
 
-### Custom slugs
-Let the user choose their own short code instead of a random one.
+### Bulk shorten
+Accept a list of URLs in one request and return all the short codes.
 
-### Per-link expiration
-Give a link an expiry time, after which it stops resolving.
+### QR code
+Return a QR-code image (PNG or SVG) for a short link.
 
-### Per-link click cap
-Cap a link at N clicks, then retire it automatically.
+### Per-link password
+Protect a link with a password that must be supplied to resolve it.
 
-### Rate limiting
-Throttle link creation per client IP to curb abuse.
-
-### Admin endpoint
-A simple endpoint listing every link with its click stats.
+### Query passthrough
+Forward query parameters (e.g. UTM tags) from the short URL onto the
+destination on redirect.
 
 ## How to contribute
 

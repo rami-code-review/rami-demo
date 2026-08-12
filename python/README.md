@@ -76,6 +76,6 @@ converted to and from a decimal amount at the API boundary. Dates are ISO
 `YYYY-MM-DD` strings. All SQL is parameterized.
 
 The layers are deliberately thin so a new feature has an obvious home:
-the [roadmap](ROADMAP.md) items (CSV import, recurring transactions,
-budgets, search, export) each slot into `storage.py` plus a route in
-`main.py`.
+the open [roadmap](ROADMAP.md) items (recurring-rule editing, a monthly
+statement, multi-currency, transaction tags) each slot into `storage.py`
+plus a route in `main.py`.

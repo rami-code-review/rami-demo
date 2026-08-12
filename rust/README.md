@@ -50,6 +50,6 @@ real file I/O is what makes it unit-testable; `main.rs` supplies the file
 handle and the poll loop.
 
 The pieces are deliberately small so a new feature has an obvious home:
-the [roadmap](ROADMAP.md) items (`--since`, regex mode, `--invert`,
-multi-file tailing, color highlighting) each slot into the match predicate
+the open [roadmap](ROADMAP.md) items (line numbers, `--tail <N>`, JSON
+field extraction, reopen-on-rotate) each slot into the match predicate
 plus the argument parser.

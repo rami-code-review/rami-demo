@@ -63,6 +63,6 @@ main.go      # wires the store to a server and listens
 Codes are generated with `crypto/rand` and retried on the (vanishingly
 rare) collision. The store is guarded by a mutex so concurrent requests
 are safe — `go test -race` covers this. The pieces are deliberately small
-so a new feature has an obvious home: the [roadmap](ROADMAP.md) items
-(custom slugs, expiration, click caps, rate limiting, an admin endpoint)
-each slot into `store.go` plus a handler in `handlers.go`.
+so a new feature has an obvious home: the open [roadmap](ROADMAP.md) items
+(bulk shorten, QR codes, per-link passwords, query passthrough) each slot
+into `store.go` plus a handler in `handlers.go`.

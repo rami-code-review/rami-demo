@@ -7,9 +7,16 @@ the lines that match.
 
 The core slice: a stdlib-only CLI that follows a file and filters lines.
 
-- `logtail [--filter <substring>] [--from-start] <file>`
+- `logtail [--filter <substring>] [--regex] [--invert] [--from-start]
+  [--since <timestamp>] [--color] <file> [<file> ...]`
 - Follows from end of file by default (like `tail -f`); `--from-start`
   reads existing content; `--filter` keeps only matching lines
+- **`--regex`** — match by regular expression, not just plain substring
+- **`--invert`** — show the lines that *don't* match, like `grep -v`
+- **`--since <timestamp>`** — show only lines logged after a given time
+- **Multi-file tail** — follow several files at once, prefixing each line
+  with its source
+- **`--color`** — highlight the matched portion of each line
 - Match logic split into a testable library; unit tests plus integration
   tests over a real temp file
 
@@ -20,20 +27,18 @@ See [`README.md`](README.md) to run it.
 Pick one of these and open a PR. (Or invent your own — these are a menu,
 not a contract.)
 
-### `--since <timestamp>`
-Show only lines logged after a given time.
+### Line numbers
+Prefix each printed line with its line number in the source file.
 
-### Regex mode
-Match lines by regular expression, not just plain substring.
+### `--tail <N>`
+Print the last N matching lines before following (like `tail -n N`).
 
-### `--invert`
-Show the lines that *don't* match, like `grep -v`.
+### JSON field extract
+For JSON-per-line logs, match/print a specific field (e.g. `--field
+level`) instead of the whole line.
 
-### Multi-file tail
-Follow several files at once, prefixing each line with its source.
-
-### Color highlighting
-Highlight the matched portion of each line in color.
+### Reopen on rotate
+Detect log rotation/truncation and reopen the file (like `tail -F`).
 
 ## How to contribute
 

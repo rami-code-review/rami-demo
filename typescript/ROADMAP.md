@@ -10,6 +10,11 @@ The core slice: an Express + TypeScript API over an in-memory store.
 - `POST /tasks`, `GET /tasks` (with `?status=all|active|done`),
   `GET /tasks/:id`, `PATCH /tasks/:id`, `DELETE /tasks/:id`
 - Titles validated and trimmed (1–200 chars); done-toggle and edit
+- **Tagging** — attach tags to a task and filter the list by tag
+- **Bulk actions** — complete or delete many tasks in one request
+- **Search** — filter tasks by title with `?search=`
+- **Recurring tasks** — completing one spawns its next occurrence
+- **Drag-to-reorder** — set and persist a manual task order
 - Endpoint tests via supertest
 
 See [`README.md`](README.md) to run it.
@@ -19,20 +24,18 @@ See [`README.md`](README.md) to run it.
 Pick one of these and open a PR. (Or invent your own — these are a menu,
 not a contract.)
 
-### Tagging
-Attach one or more tags to a task, and filter the list by tag.
+### Due dates
+Give a task a due date and filter for what's due or overdue.
 
-### Recurring tasks
-Tasks that re-create themselves on a daily, weekly, or monthly schedule.
+### Subtasks
+Nest checklist items under a task and roll their completion up.
 
-### Search
-A search box that filters tasks by title as you type.
+### Priority + sort
+Assign a priority and sort the list by priority (composing with the
+existing filters).
 
-### Bulk actions
-Select multiple tasks at once and complete or delete them in one go.
-
-### Drag-to-reorder
-Reorder tasks by dragging, and persist the new order.
+### CSV import
+Bulk-create tasks from an uploaded CSV.
 
 ## How to contribute
 
