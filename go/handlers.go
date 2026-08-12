@@ -39,6 +39,7 @@ func NewHandler(store *Store, baseURL string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /shorten", h.shorten)
 	mux.HandleFunc("GET /api/stats/{code}", h.stats)
+	mux.HandleFunc("GET /api/admin/links", h.admin)
 	mux.HandleFunc("GET /{code}", h.resolve)
 	return mux
 }
@@ -166,4 +167,9 @@ func (h *Handler) stats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, link)
+}
+
+func (h *Handler) admin(w http.ResponseWriter, r *http.Request) {
+	links := h.store.AllLinks()
+	writeJSON(w, http.StatusOK, links)
 }
