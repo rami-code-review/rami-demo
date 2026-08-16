@@ -1,28 +1,21 @@
-# Rami code review — close the loop
+# rami-demo
 
-This repo reviews itself with [Rami](https://rami.reviews). Open or push to a pull
-request here and Rami reviews it automatically, within about a minute.
+This repo tries [Rami](https://rami.reviews) on itself: open or push a PR here and Rami
+reviews it automatically, in about a minute. No PR merges — it's a playground.
 
-**The loop — run it after every push to a PR:**
+**Pick an app and work in its directory** — each has its own `AGENTS.md` with how to build
+there and run the Rami loop:
 
-1. Run `/rami:review` on the PR.
-2. Fix the real findings; rebut the false ones (false positive, framework
-   guarantee, intentional design, or duplicate).
-3. Repeat until `/rami:review` comes back clean.
+- [`python/`](python/) — ledger (FastAPI + SQLite)
+- [`go/`](go/) — shortener (net/http)
+- [`typescript/`](typescript/) — task-manager (Express)
+- [`rust/`](rust/) — logtail (tail -f + filtering)
 
-You still decide what merges.
+**The loop, wherever you are:** after every push, get Rami's review, fix the real findings
+or rebut the false ones, repeat until it's clean. You decide what's real.
 
-**First time? Connect your agent to Rami over MCP.** In Claude Code:
-
-```
-/plugin marketplace add rami-code-review/claude-code-marketplace
-/plugin install rami@rami-code-review
-```
-
-Then run `claude` → `/mcp` → select `plugin:rami:rami` → log in.
-
-Two canonical references to point any agent (or human) at:
-
-- Marketplace + plugins, for Claude Code and Codex —
-  https://github.com/rami-code-review/claude-code-marketplace
-- Setup for every agent, in one file — https://rami.reviews/llms.txt
+**Connect Rami (once):** install the `rami` plugin from the marketplace
+(https://github.com/rami-code-review/claude-code-marketplace, which serves Codex too) and
+connect its MCP server (`https://rami.reviews/mcp`), then authenticate. Reviews need no
+account; the MCP tools need the one-time login. Exact steps for your agent:
+https://rami.reviews/llms.txt
