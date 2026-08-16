@@ -1,0 +1,42 @@
+name: Close stale PRs
+
+on:
+  schedule:
+    - cron: "0 8 * * *"   # daily at 08:00 UTC
+  workflow_dispatch: {}    # allow manual runs
+
+permissions:
+  pull-requests: write     # comment, label, close
+  contents: write          # delete same-repo head branches on close
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@5bef64f19d7facfb25b37b414482c7164d639639 # v9
+        with:
+          # PRs only — this is a playground for trying Rami, not an issue tracker
+          days-before-issue-stale: -1
+          days-before-issue-close: -1
+
+          # 7 days idle -> warn; 2 more days idle -> close (9 days total)
+          days-before-pr-stale: 7
+          days-before-pr-close: 2
+
+          stale-pr-label: stale
+          stale-pr-message: >
+            This PR has been idle for 7 days. rami-demo is a playground for
+            *trying* Rami — PRs here aren't merged — so idle ones are tidied up
+            automatically. It'll close in 2 days without new activity. Open a
+            fresh one anytime.
+          close-pr-message: >
+            Closing this PR after 9 days of inactivity to keep the playground
+            tidy. Nothing wrong with your PR — this repo just doesn't merge, and
+            idle PRs get swept. Open a new one whenever you'd like to try Rami.
+
+          # delete the head branch on close — only affects same-repo branches;
+          # fork PRs' branches live on the fork and are left untouched
+          delete-branch: true
+
+          operations-per-run: 60
+          ascending: true   # oldest first

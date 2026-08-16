@@ -51,7 +51,9 @@ on your own repo.
    intentionally left unbuilt, plus a one-line description of each.
 3. **Fork this repo**, and implement one of those features (or invent
    your own — go wild).
-4. **Open a pull request** back to your fork.
+4. **Open a pull request** from your fork against **`rami-code-review/rami-demo`**
+   (the PR's base repo) — it's set up to review your PR for free, no account
+   needed.
 5. **Watch Rami review it.** Within about a minute, Rami posts its review
    right on your PR. Address what it found, or push back if you disagree —
    the same loop you'd run on real work.
@@ -119,8 +121,9 @@ Codex:
 - **PRs here aren't merged.** This repo is for *trying* Rami, not for
   contributing fixes. Open whatever PR you like — it won't land, and
   that's expected.
-- **Stale PRs auto-close after 48 hours**, to keep the repo tidy. Open a
-  fresh one anytime.
+- **Idle PRs are auto-closed** to keep the repo tidy — a heads-up comment
+  after 7 days of inactivity, then closed 2 days later. Open a fresh one
+  anytime.
 - **Want to actually contribute to Rami?** This isn't the place — head to
   [rami.reviews](https://rami.reviews) instead.
 

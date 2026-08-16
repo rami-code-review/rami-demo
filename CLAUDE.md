@@ -11,8 +11,9 @@ there and run the Rami loop:
 - [`typescript/`](typescript/) — task-manager (Express)
 - [`rust/`](rust/) — logtail (tail -f + filtering)
 
-**The loop, wherever you are:** after every push, run `/rami:review`, fix the real findings
-or rebut the false ones, repeat until it's clean. You decide what's real.
+**The loop, wherever you are:** open your PR against `rami-code-review/rami-demo`, then after
+every push run `/rami:review`, fix the real findings or rebut the false ones, and repeat until
+it's clean. You decide what's real.
 
 **Connect Rami (once)** — in Claude Code: `/plugin marketplace add rami-code-review/claude-code-marketplace`
 then `/plugin install rami@rami-code-review`, then `/mcp` → select `rami` → log in.
