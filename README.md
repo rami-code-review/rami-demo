@@ -1,132 +1,175 @@
-# rami-demo
+# Try Rami on real code
 
-Four small apps, four languages. Fork one, build a feature, open a PR —
-and watch [Rami](https://rami.reviews) review the code you wrote.
+Welcome 😸
 
-This repo exists so you can try Rami on real code before installing it on
-your own. No signup, no quota — every PR opened here gets a free Rami
-review.
+This is a public demo repository for [Rami Code Review](https://rami.reviews).
 
-## What's in here
+It exists so you can see how Rami works on real pull requests before installing it on your own repositories.
 
-Four small but complete-enough apps, each in a different language:
+## Start here
 
-| Directory | App | What it is |
-|---|---|---|
-| [`typescript/`](typescript/) | Task manager | A small to-do web app (the kind you'd build for yourself) |
-| [`python/`](python/) | Ledger | A personal-finance tracker — transactions, categories, summaries |
-| [`go/`](go/) | URL shortener | Turn long links into short ones, count the clicks |
-| [`rust/`](rust/) | Log tailer | A `tail -f` with built-in filtering |
+If you want the shortest path, start with [one good example PR](https://github.com/rami-code-review/rami-demo/pull/9).
 
-Each one is the scrappy version of a tool you already use. None of them
-is finished — that's the point.
+If you just want to see what Rami looks like in action, start with these:
 
-## Why these apps
+- **Browse real reviewed PRs:** [20 merged demo PRs](https://github.com/rami-code-review/rami-demo/pulls?q=is%3Apr+is%3Amerged+author%3AShavakan)
+- **Try it yourself:** fork this repo, implement a feature, and open a PR against **`rami-code-review/rami-demo`**
+- **Use the full MCP loop:** connect your agent and let it fetch findings, fix them, and ask for re-review
 
-We picked apps you can grok in a few minutes, not toy snippets and not
-sprawling production codebases.
+## What's in this repo?
 
-- **Toy snippets** ("reverse a string") don't have enough surface area
-  for a code review to mean anything. There's nowhere for a real bug to
-  hide.
-- **Full production apps** take an hour just to understand before you can
-  contribute. Too much friction for a "let me just try this" visit.
+There are four unfinished small apps, each in a different language:
 
-A small-but-real app is the sweet spot: recognizable enough that you
-already have intuitions about how it should work, real enough that adding
-a feature surfaces the kind of mistake a reviewer should catch — an
-unhandled error path, an injection-prone query, an off-by-one in date
-math.
+| Directory                    | App           | What it is                                                       |
+| ---------------------------- | ------------- | ---------------------------------------------------------------- |
+| [`typescript/`](typescript/) | Task manager  | A small to-do web app (the kind you'd build for yourself)        |
+| [`python/`](python/)         | Ledger        | A personal-finance tracker — transactions, categories, summaries |
+| [`go/`](go/)                 | URL shortener | Turn long links into short ones, count the clicks                |
+| [`rust/`](rust/)             | Log tailer    | A `tail -f` with built-in filtering                              |
 
-The reviews you get here are honest. Nothing is staged. We didn't plant
-bugs for Rami to "find." You write a real feature; Rami reviews your
-actual code; whatever it catches, it catches — and sometimes it'll just
-say "looks good" and approve. That's the product working the way it would
-on your own repo.
+Each app is intentionally unfinished, with a ROADMAP.md to help you pick the next thing to build.
 
-## How to use this repo
+## Why these work as a demo
 
-1. **Pick an app** in a language you're comfortable in.
-2. **Open its `ROADMAP.md`.** Each app lists a handful of features we
-   intentionally left unbuilt, plus a one-line description of each.
-3. **Fork this repo**, and implement one of those features (or invent
-   your own — go wild).
-4. **Open a pull request** from your fork against **`rami-code-review/rami-demo`**
-   (the PR's base repo) — it's set up to review your PR for free, no account
-   needed.
-5. **Watch Rami review it.** Within about a minute, Rami posts its review
-   right on your PR. Address what it found, or push back if you disagree —
-   the same loop you'd run on real work.
-6. **Close the loop — don't fix it by hand.** Let your agent pull Rami's
-   findings over MCP and apply them, then watch Rami re-review until the
-   flags clear. This repo already ships the rule, so your agent knows the
-   drill — see [Experience the full loop](#experience-the-full-loop).
+We picked apps that are quick to understand, but still real enough for code review to matter.
 
-That's it. The ROADMAPs are a menu, not a contract; the goal is to give
-you a real, self-contained slice of work so the review has something to
-chew on.
+Toy problems don't leave enough room for meaningful review. Large production codebases take too long to learn. These apps sit in the middle: small enough to grasp quickly, real enough for bugs, edge cases, and risky patterns to show up.
+
+The reviews here are honest. We did not plant bugs for Rami to "find." You write a real change, Rami reviews the actual diff, and sometimes it will simply approve it. That is the point.
+
+
+## Try it yourself
+
+1. **Pick an app** in a language you are comfortable with.
+2. **Open its `ROADMAP.md`** and choose a feature.
+3. **Fork this repository** and implement the feature yourself or with your coding agent.
+4. **Open a pull request against `rami-code-review/rami-demo`**.
+5. **Wait for Rami to review it** on the PR.
+6. **Fix or rebut the findings**, then re-run the loop until it clears.
+
+That's it.
+
+### Important: open the PR against the demo repo
+
+Your PR must target:
+
+**Base repository: `rami-code-review/rami-demo`**
+
+If the base is your own fork, Rami will not review it here.
+
+If you use GitHub CLI:
+
+```bash
+gh pr create --repo rami-code-review/rami-demo
+```
 
 ## See real reviews
 
-Want to see what a Rami review actually looks like before you fork? These
-apps are built up through small pull requests, each one reviewed by Rami
-as it lands. Browse the [merged PRs](../../pulls?q=is%3Apr+is%3Amerged)
-and open any of them — the reviews you find there are real, on real
-iterative work. Some threads show the whole loop: Rami flags an issue, an
-agent pushes a fix over MCP, and Rami re-reviews and clears it.
+If you want to see what a Rami review looks like before forking, start here:
+
+[Browse merged demo PRs](https://github.com/rami-code-review/rami-demo/pulls?q=is%3Apr+is%3Amerged+author%3AShavakan)
+
+Those reviews are real. Most PRs started from a single-line prompt and were fixed end to end through the full loop.
+
+A small note: the early PRs were written with a weaker model on purpose so the review flow would be easier to see. Use whatever model you want when you try it yourself.
+
 
 ## Experience the full loop
 
-The review is only half the story. Rami speaks
-[MCP](https://modelcontextprotocol.io), so your coding agent — Claude Code,
-Cursor, or Codex — can pull the findings and fix them for you, then Rami
-re-reviews until the flags clear. You decide what merges. This is the part
-that's hard to believe until you feel it.
+The review is only half the story.
 
-**This repo is already wired for it.** The `CLAUDE.md` and `AGENTS.md` at the
-root tell your agent the loop:
+Rami speaks [MCP](https://modelcontextprotocol.io), so Claude Code, Cursor, or Codex can fetch findings, apply fixes, and ask for re-review until things clear. You still decide what merges.
+
+This repo is already wired for that flow. The `CLAUDE.md` and `AGENTS.md` at the root tell your agent what to do after each push.
 
 > After every push, run `/rami:review` on the PR. Fix the real findings,
 > rebut the false ones. Repeat until `/rami:review` comes back clean.
 
-So once Rami is connected, you just push — your agent runs the loop.
-
-**Connect your agent (one time)** — in Claude Code:
+**Connect your agent once** — for Claude Code:
 
 ```
 /plugin marketplace add rami-code-review/claude-code-marketplace
 /plugin install rami@rami-code-review
+/reload-plugins
 ```
 
 Then run `claude` → `/mcp` → select `plugin:rami:rami` → log in.
 
-**Two places to point any agent — or yourself:**
+Useful links:
 
-- **Marketplace + plugins**, for Claude Code and Codex —
-  https://github.com/rami-code-review/claude-code-marketplace
-- **Setup for every agent**, in one file — **https://rami.reviews/llms.txt**
+- **Claude Code / Codex marketplace setup:** https://github.com/rami-code-review/claude-code-marketplace
+- **All setup instructions:** https://rami.reviews/llms.txt
 
-**Or just let your agent set it up** — paste this into Claude Code, Cursor, or
-Codex:
+Or just paste this into Claude Code, Cursor, or Codex:
 
-> Set up the Rami code review plugin (MCP server + skills) and add a rule to run
-> /rami:review after every push until clean. See https://rami.reviews/llms.txt.
+> Set up the Rami code review plugin (MCP server + skills) and add a rule to run /rami:review after every push until clean. See https://rami.reviews/llms.txt.
 
-**Already have a PR open here?** The one-liner is just:
+If you already have a PR open here, the one-liner is:
 
-> "Fetch the Rami findings on my open PR and apply them."
+> Fetch the Rami findings on my open PR and apply them.
 
-## A few honest notes
+## Review configuration
 
-- **PRs here aren't merged.** This repo is for *trying* Rami, not for
-  contributing fixes. Open whatever PR you like — it won't land, and
-  that's expected.
-- **Idle PRs are auto-closed** to keep the repo tidy — a heads-up comment
-  after 7 days of inactivity, then closed 2 days later. Open a fresh one
-  anytime.
-- **Want to actually contribute to Rami?** This isn't the place — head to
-  [rami.reviews](https://rami.reviews) instead.
+Rami reads an optional [`.rami.yaml`](.rami.yaml) at the repo root.
 
-## License
+This repo includes one pinned to the current defaults, so it mostly acts as a reference. You can use it to control things like review language, tone, auto-approval, and whether findings can fail CI.
 
-[MIT](LICENSE).
+If you want to experiment, changing `.rami.yaml` in your fork is a good way to do it.
+
+The settings reference is also available in the [web console](https://rami.reviews/console#repository-configuration).
+
+## A few notes about this repo
+
+- **PRs here are not merged.** This repo exists to try Rami, not to accept contributions.
+- **Idle PRs are auto-closed.** You'll get a warning after 7 days of inactivity, then the PR closes 2 days later.
+- **This is a public repo.** Don't commit credentials, tokens, API keys, or anything sensitive, even on your fork.
+
+## FAQ
+
+**Do I need a Rami account or a subscription to try this?**
+
+No. PRs opened against `rami-code-review/rami-demo` can be reviewed for free here.
+
+If you want to use the MCP fix loop from your agent, that requires signing in. The sign-in is free.
+
+### Where should I open my PR?
+
+From your fork, with the **base repo set to `rami-code-review/rami-demo`**.
+
+If the base is your own fork, Rami will not review it here.
+
+### I opened a PR but nothing happened
+
+Usually one of these:
+
+- the PR base is your fork, not `rami-code-review/rami-demo`
+- the PR is a draft — auto-review waits until you mark it **Ready for review** (or ask your agent to review it now)
+- it has only been a short while
+
+### Will my PR get merged?
+
+No, by design. This repo is for trying Rami, not for contributing code.
+
+### Do I need to use an AI agent?
+
+No. You can write the change yourself.
+
+If you do use an agent, Claude Code, Cursor, and Codex all work well with the MCP flow.
+
+### Can I use Rami on my own repositories?
+
+Yes. Start at [rami.reviews](https://rami.reviews/).
+
+### Is it safe to commit secrets here?
+
+Never. This repo and your fork are public. Keep credentials, tokens, and API keys out of anything you push.
+
+### How long do PRs stay open?
+
+Idle PRs get a warning after 7 days, then close 2 days later.
+
+### I already have a PR open. How do I just get the findings and fix them?
+
+Tell your agent:
+
+> Fetch the Rami findings on my open PR and apply them.
