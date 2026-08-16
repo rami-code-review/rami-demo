@@ -1,0 +1,61 @@
+# .rami.yaml
+#
+# Per-repository configuration for Rami Code Review (https://rami.reviews).
+# Every value below is set to Rami's current default, so this file changes no
+# behavior — it exists to make this repository's setup visible and to serve as a
+# documented reference for what a real .rami.yaml looks like.
+#
+# You can also manage these settings from the web console:
+# https://rami.reviews/console#repository-configuration
+
+# Settings for automatic, webhook-triggered reviews (on push and pull request events).
+webhook:
+  # Whether webhook events automatically trigger a review at all.
+  # Type: boolean. One of: true, false. Default: true.
+  trigger-review: true
+
+  # Whether draft pull requests are auto-reviewed. Off by default, since a draft
+  # signals work-in-progress. Marking a PR "Ready for review" always triggers a
+  # review regardless of this setting; manual/agent-triggered reviews ignore it too.
+  # Type: boolean. One of: true, false. Default: false.
+  review-drafts: false
+
+# Repository-level settings.
+repo:
+  # Language Rami writes its review in.
+  # Type: string. One of: en, ja, ko. Default: unset — follow the organization
+  # or account language. (Left commented so this file pins nothing.)
+  # lang: en
+
+# Settings that shape the review itself.
+review:
+  # Tone of Rami's review comments.
+  # Type: string. One of: cat (playful), professional. Default: cat.
+  personality: cat
+
+  # Whether Rami approves (posts a green check on) a PR it finds no issues in.
+  # When false, Rami leaves an approving comment but no formal approval status.
+  # Type: boolean. One of: true, false. Default: true.
+  auto-approve: true
+
+  # Whether the review's GitHub check run may fail CI on blocking issues.
+  # When false, the check run is forced neutral and never blocks CI.
+  # Type: boolean. One of: true, false. Default: true.
+  allow-ci-block: true
+
+  # Whether each inline finding includes a paste-ready "prompt for AI agent"
+  # fix block your coding agent can apply.
+  # Type: boolean. One of: true, false. Default: true.
+  agent-fix-prompt: true
+
+  # Lowest finding severity that concludes the check run as a failure; findings
+  # below this still surface but don't fail the check.
+  # Type: string. One of: blocking, high, medium, low, all, none. Default: blocking.
+  fail-on: blocking
+
+# Settings for project instruction files.
+instructions:
+  # Whether Rami reads project instruction files (CLAUDE.md, AGENTS.md) and
+  # injects them into the review prompt.
+  # Type: boolean. One of: true, false. Default: true.
+  enabled: true
